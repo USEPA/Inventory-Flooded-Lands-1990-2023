@@ -1,0 +1,4748 @@
+---
+title: "Flooded Lands Inventory Estimate: 1990 - 2022"
+author: "J. Beaulieu"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+  df_print: paged
+toc: true
+toc_float: true
+fig_caption: yes
+depth: 2
+number_sections: true
+code_folding:  hide
+editor_options: 
+  chunk_output_type: console
+---
+  
+  ## Setup
+  
+  # Load libraries and print session info to facilitate reproducibility.  This was run on DMAP memory intensive 16xLarge (64 cpus, 512GB) instance.  
+```{r setup, message=FALSE, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+
+library(tidyverse)
+library(sf)
+library(USAboundaries) # state map
+library(tigris) # shift_geometry for AK, HI, and PR
+library(mapsf) # For mapping AK, HI, and PR
+library(openxlsx2)
+library(readxl)
+library(cowplot) # plot_grid
+library(fitdistrplus) # uncertainty analysis
+library(triangle) # uncertainty analysis
+library(EnvStats) # uncertainty analysis
+library(tictoc) # calculation times
+library(furrr) # future map
+library(progressr) # future_map progress bar
+library(janitor)
+library(gt)
+
+library(conflicted) # manage MASS::select and dplyr::select conflict
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+
+
+# Print R session info
+print(sessionInfo())
+```
+
+
+## Flooded Lands Data Sources
+Flooded Lands in the US are derived from the [U.S. Army Corps of Engineers National Inventory of Dams](https://nid.sec.usace.army.mil/ords/f?p=105:1::::::), Navigable Waterways dataset maintained by the Department of Homeland security, the [National Wetlands Inventory]()and the [National Hydrography Data (NHD)](https://www.usgs.gov/core-science-systems/ngp/national-hydrography) maintained by the USGS.  Several screening tools were used to discriminate natural water bodies from Flooded Lands in these data sets.
+
+
+Below we read in the layers created by Alex.  Layers are then combined into a single sf object.  A simple check shows that all rows were preserved in the merge.
+
+```{r, message=FALSE, warning=FALSE, results="hide"}
+
+
+# ALL DATA
+# Alex Hall prepared the GIS data for the 1990-2022 inventory.  Data are
+# presented as four layers in 2023_Flooded_Lands_Final_102323.gdb
+st_layers("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb")
+# Data were shared via OneDrive as .zip file, downloaded to local clone of this 
+# RStudio project, uploaded to newftp.epa.gov, downloaded to mounted memory on
+# RStudio instance on DMAP using sftp (see "C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency
+# (EPA)\Profile\Documents\Documents\research\statistics\R\DMAP\download from ftp to DMAP.docx"),
+# and unzipped via utils::unzip(). 
+
+# These data have been intersected with a layer of US state and territory boundaries
+# (from USABoundaries package: inputData/us_states.shp) and the IPCC climate aggregated
+# climate layer ("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
+# select(fldd_zn) %>% # pull out Flooded Lands climate zone
+# rename(climate = fldd_zn)).  All area calculations were performed in Goode Homolosine Land
+# "ESRI:54052" projection.  All layers projected to WGS84.
+
+# RESERVOIRS AND PONDS FROM NWI-----------------------
+# nwi <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb", 
+#                    layer = "NWI_Final_2023", 
+#                    fid_column_name = "OBJECTID") %>%
+#   janitor::clean_names() %>%
+#   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
+#   rename(area_meters = intersect_area_meters,
+#          stusps = state_abr,
+#          year = nid_year_completed)
+# 
+# table(st_geometry_type(nwi)) # all MULTIPOLYGON
+# # make_valid may not be necessary, and in fact mess with mapping later on.
+# # res <- st_make_valid(res) # correct any issues with invalid geometry
+# st_crs(nwi) # 4326, WGS84
+# nrow(nwi) # 6,225,698
+# 
+# # Do all polygons have original area, new area, state and climate? YES!
+# nwi %>% st_drop_geometry() %>% # expedite calcs
+#   summarize(original.area.na = sum(is.na(original_area_meters)),
+#             new.area.an = sum(is.na(area_meters)),
+#             climate.na = sum(is.na(fldd_zn)),
+#             state.na = sum(is.na(stusps))) 
+# 
+# # how many have dam construction year?
+# nwi %>% st_drop_geometry() %>% # expedite calcs
+#   summarize(dam.n = sum(!is.na(year))) #54,498!
+
+tic()
+nwi <- readRDS(file = "nwi.rds")
+toc()
+
+# NAVIGABLE WATERWAYS-------------------------------
+nav <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb", 
+                   layer = "Navigable_Waterways_2023") %>%
+  janitor::clean_names() %>%
+  st_sf() %>% # # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
+  rename(original_area_meters = original_area_m)
+table(st_geometry_type(nav)) # all MULTIPOLYGON
+# make_valid may not be necessary, and in fact mess with mapping later on.
+# nav <- st_make_valid(nav) # correct any issues with invalid geometry
+st_crs(nav) # 4326, WGS84
+nrow(nav) # 31,899
+
+# Do all polygons have original area, new area, state, and climate? YES!
+nav %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(original_area_meters)),
+            new.area.an = sum(is.na(area_meters)),
+            climate.na = sum(is.na(fldd_zn)),
+            state.na = sum(is.na(stusps)))
+
+# CANALS AND DITCHES
+canals <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb//2023_Flooded_Lands_Final_102323.gdb", 
+                      layer = "Ditches_Final_2023") %>%
+  janitor::clean_names() %>%
+  mutate(ftype = "CanalDitch", # code below uses this key to identify canals/ditches
+         year = as.numeric(year)) %>%
+  #st_sf() %>% # # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
+  rename(original_area_meters = original_area_m)
+table(st_geometry_type(canals)) # all MULTIPOLYGON
+# make_valid may not be necessary, and in fact mess with mapping later on.
+# canals <- st_make_valid(canals) # correct any issues with invalid geometry
+st_crs(canals) # 4326, WGS84
+nrow(canals) # 267,715
+
+# Do all polygons have original area, new area, state and climate? YES!
+canals %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(original_area_meters)),
+            new.area.an = sum(is.na(area_meters)),
+            climate.na = sum(is.na(fldd_zn)),
+            state.na = sum(is.na(stusps)))
+
+# how many have dam construction year?
+canals %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) #103
+
+# I don't know where the construction year data came from.  These polygons are not associated
+# with a NID point.  Set to NA until confirmed with Alex.
+canals <- canals %>%
+  mutate(year = NA)
+
+
+#  MORE RESERVOIRS AND PONDS
+# These are NHD features that align with a NID dam or drinking water intake, 
+# but were not captured in the NWI data.
+nhd <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb//2023_Flooded_Lands_Final_102323.gdb",
+                   layer = "NHD_Final_2023") %>%
+  janitor::clean_names() %>%
+  st_sf() %>% # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
+  rename(area_meters = intersect_area_meters,
+         stusps = state_abr,
+         year = year_completed)
+table(st_geometry_type(nhd)) # all MULTIPOLYGON
+# make_valid may not be necessary, and in fact mess with mapping later on.
+# nhd <- st_make_valid(nhd) # correct any issues with invalid geometry
+st_crs(nhd) # 4269
+nhd <- st_transform(nhd, 4326) # project to 4326, WGS84
+st_crs(nhd) # 4326, WGS84
+nrow(nhd) # 10,595
+
+# Do all polygons have original area, new area, state and climate? YES!
+nhd %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(original_area_meters)),
+            new.area.an = sum(is.na(area_meters)),
+            climate.na = sum(is.na(fldd_zn)),
+            state.na = sum(is.na(stusps)))
+
+# how many have dam construction year?
+nhd %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) #10,595
+
+# MERGE SPATIAL OBJECTS----------------------------------------
+# Total number of observations
+nrow(nwi) + nrow(nav) + nrow(canals) + nrow(nhd) # 6,535,897
+
+# combine spatial data object
+# fl.sf <- dplyr::bind_rows(nwi, nav, canals, nhd) # ~ 1 minute
+# table(st_geometry_type(fl.sf)) # all MULTIPOLYGON
+# nrow(fl.sf) # 6,535,897
+# st_crs(fl.sf) # 4326, WGS84
+# 
+# # Do all polygons have original area, new area, state and climate? YES!
+# fl.sf %>% st_drop_geometry() %>% # expedite calcs
+#   summarize(original.area.na = sum(is.na(original_area_meters)),
+#             new.area.an = sum(is.na(area_meters)),
+#             climate.na = sum(is.na(fldd_zn)),
+#             state.na = sum(is.na(stusps)))
+# 
+# # how many have dam construction year?
+# fl.sf %>% st_drop_geometry() %>% # expedite calcs
+#   summarize(dam.n = sum(!is.na(year))) #65,093 (after removing year from canals layer)
+# 
+# # select only needed columns
+# names(fl.sf) 
+# fl.sf <- fl.sf %>% select(area_meters, original_area_meters,
+#                           contains("nid"),
+#                           stusps, fldd_zn, 
+#                           ftype, fcode,
+#                           year,
+#                           wetland_type,
+#                           comid, globalid, objectid)
+# 
+# format(utils::object.size(fl.sf), units = "GB") #8.1 GB
+
+
+
+```
+
+## Area Representation
+### Climate
+These features have been intersected with a layer of US state and territory boundaries (from USABoundaries package: inputData/us_states.shp) and the IPCC climate aggregated climate layer.  IPCC emission factors are aggregated into six climate zones.  The original 12 IPCC climate zones were aggregated per Table 7A.2 in Lovelock et al. Flooded Lands Methodology.  See C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency (EPA)\Profile\Documents\Documents\research\IPCC\methodology2019\methodology2019.Rproj for details.
+```{r, message=FALSE, warning=FALSE, results="hide"}
+# SharePoint                          
+climate <- sf::st_read("flooded_lands/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
+  select(fldd_zn) %>% # pull out Flooded Lands climate zone
+  rename(climate = fldd_zn) # rename
+
+# climate <- st_cast(climate, "MULTIPOLYGON")
+# climate <- st_make_valid(climate) # correct any issues with invalid geometry
+st_crs(climate) # 4326, WGS84
+
+plot(climate)
+
+# rename climate field
+# fl.sf <- fl.sf %>% dplyr::rename(climate = fldd_zn)
+```
+
+### Areas and State Names
+All area calculations were performed in Goode Homolosine Land "ESRI:54052" projection.  All layers were projected to WGS84 after the area calculations.
+The area of the polygons prior to intersection with state and climate is in 'original_area_meters', but converted to 'area_ha_original' below. This area is used to determine if the polygon is a pond or reservoir. Area of the intersected polygons is in 'area_meters', but converted to 'area_ha_new' below.  State postal code is in 'stusps'.  Full state name is mutated into 'name' below.
+```{r, message=FALSE, warning=FALSE, results="hide"}
+# names(fl.sf)
+
+# fl.sf <- fl.sf %>%
+#   mutate(area_ha_original = original_area_meters / 10000,
+#          area_ha_new = area_meters / 10000)
+
+# ALL CODE TO DEFINE f.sf has been commented out above this line
+# the following loads the subsampled fl.sf object
+tic()
+fl.sf <- st_read("output/2023_Flooded_Lands_Inventory_subset.gpkg")
+toc() # 516 seconds
+
+
+# Do all polygons have original and new area in ha? YES!
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(area_ha_original)),
+            new.area.an = sum(is.na(area_ha_new)))
+
+# Set up to convert state abbreviations to full name.  Need to add DC and PR
+st_crosswalk <- tibble(name = state.name) %>%  # state.name is base R
+  bind_cols(tibble(stusps = state.abb)) %>% # state.abb is base R
+  bind_rows(tibble(name = c("District of Columbia", "Puerto Rico", # add DC and PR
+                            "Guam and CNMI", "US Virgin Islands"),  # add DC and PR
+                   stusps = c("DC", "PR", "GU", "VQ")))
+
+# # Add full state name.  ~1.5 minutes
+# fl.sf <- fl.sf %>% 
+#   left_join(., st_crosswalk, by = "stusps") # left_join will bring in name column
+# table(fl.sf$name, useNA = "ifany") # no NA's, good!
+# 
+# # Remove unnecessary columns
+# fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
+
+```
+## Omit Guam and Virgin Islands
+Alex included Guam and Virgin Islands, but the Excel file isn't ready to accommodate them.  Omitting for now.
+```{r}
+# fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
+# table(fl.sf$stusps) # no GU or VQ, good
+# nrow(fl.sf) # 6,535,897 down to 6,535,554
+```
+
+
+## Preview Polygon
+Navigation layer polygons were compared to NWI polygons and any overlap removed from navigation layer.  In many instances this converted the original navigation polygon into many smaller polygons, all sharing a common comid value.  Polygon were further divided by the intersection with climate and state polygon.  For example, COMID == 120049697 is a Mississippi River impoundment that was split into `r fl.sf %>% filter(comid == 120049697) %>% nrow()` individual polygons.  The cumulative area of the 131 polygons is equal to the area of the original polygon before intersecting with state and climate, but after removing NWI overlap areas:
+```{r, message=FALSE, warning=FALSE, results="hide"}
+# area after removing NWI overlap, but before intersection with state and climate
+# fl.sf %>% st_drop_geometry() %>% filter(comid == 120049697) %>% distinct(area_ha_original)
+# fl.sf %>% st_drop_geometry() %>% filter(comid == 120049697) %>% summarize(area_total = sum(area_ha_new))
+```
+
+## Flooded Land Age
+NWI and NHD polygons were associated with National Inventory of Dams (NID) points.  NID contains a 'year' field indicating the year the dam was created.  Finally, while drafting report I noticed that lakes Oahe and Saskawea (large Missouri River impoundments) are missing year data.  Manually add those in below, but should check with Alex to see why they weren't included in his data.
+
+```{r, message=FALSE, warning=FALSE, results="hide"}
+# PREVIEW YEAR DATA
+# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # 65,093 features with year data
+# table(fl.sf$year, useNA = "ifany") # zeroes and 9999. need to investigate
+# 
+# # Why year == 0?  These are NA, converted to zero during Alex's data processing
+# fl.sf %>% st_drop_geometry() %>% filter(year == 0) # see email to Alex on 10/27/2023
+# # convert year == 0 to NA
+# fl.sf <- fl.sf %>% mutate(year = replace(year, year == 0, NA)) 
+# 
+# # why year == 9999
+# fl.sf %>% st_drop_geometry() %>% filter(year == 9999) # nwi objectid = 418836 and 488920.  NID reports 9999 for associated dams.
+# # change these to NA
+# fl.sf <- fl.sf %>% mutate(year = replace(year, year == 9999, NA)) 
+# 
+# table(fl.sf$year) # zeroes and 9999 are gone, good
+# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # dropped to 60,838 features with year data
+
+# FIX OTHERS WITH INCORRECT YEAR----------------------
+# I inspected most of the large reservoirs that transitioned from LCFL to FLRFL
+# between 1990 and 2021 and found a few errors in the yearCompleted data.  Below
+# are the corrections. 
+# Data entered into vector.
+fixYear <- c("1364225", 1953, NA, # Lake Sakakawea
+             "5505511", 1953, NA, # Lake Sakakawea
+             "5457764", 1966, NA, # Oahe
+             
+             "1092075", 1954, NA, # Francis-Case, SD
+             "1092629", 1954, NA, # Francis-Case, SD
+             "5404040", 1954, NA, # Francis-Case, SD
+             
+             # this NWI feature (Wilson Lake, AL) has two dams 1938 and 1939. Assign 1938 based on most downstream dam.
+             "2494257", 1938, NA, 
+             "2474396", 1938, NA,
+             
+             # this polygon (AL) has five dams (1962, 1978, 1958, 1992, 1975).  Assign 1962 based on most downstream dam
+             "4629043", 1962, NA, 
+             
+             "3710788", 1953, NA, # AR
+             
+             # five dams (1967, 1968, 1968, 1968, 1968).  Assign 1967 based on most downstream dam AR
+             "3671874", 1967, NA,
+             NA, 1967, 120049464, # this is same reservoir as above, but from navigable waterways data.  No year assigned by Alex, but is 1967
+             "3702243", 1969, NA, # AR, most downstream dam
+             NA, 1969, 7767759, # same reservoir as above, but in nhd data, id'd by comid
+             
+             "1987773", 1954, NA, # GA
+             "1989307", 1954, NA, # GA, same as above
+             "1975290", 1969, NA, # SC, 1969 is oldest dam
+             "3763529", 1969, NA) # OK, series of locks and dams built 1969-1970
+
+# vector coerced to tibble
+fixYear <- tibble(objectid = fixYear[seq(1, length(fixYear)-2, 3)],
+                  year = as.integer(fixYear[seq(2, length(fixYear)-1, 3)]),
+                  comid = as.numeric(fixYear[seq(3, length(fixYear), 3)]))
+
+# tibble with objectid values
+fixYear.objectid <- fixYear %>% filter(!is.na(objectid)) %>% select(-comid)
+# tibble with comid values
+fixYear.comid <- fixYear %>% filter(!is.na(comid)) %>% select(-objectid)
+
+
+# # Join fixYear.objectid with fl.sf
+# nrow(fl.sf) # 6,535,554
+# tic() # 1 minute on memory intensive DMAP
+# fl.sf <- full_join(fl.sf, fixYear.objectid, by = "objectid")
+# toc()
+# nrow(fl.sf) # 6,535,554, same as before join, so good!
+# names(fl.sf) # but we have year.x and year.y.  Gotta merge these.
+
+# year.y values are from fixYear.  Keep year.y
+# Merge year columns, then remove unneeded columns
+# fl.sf <- fl.sf %>% mutate(year = case_when(!is.na(year.y) ~ year.y, # if year.y, then year.y
+#                                            TRUE ~ year.x)) %>% # any other condition, year.x 
+#   select(-year.x, -year.y) # remove unneeded columns
+# 
+# # fix the two polygons that have comid rather than a objectid.
+# # the correct data are in fixYear.comid.  Using `replace` requires one comid at a time.
+# fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[1], fixYear.comid$year[1])) 
+# fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[2], fixYear.comid$year[2])) 
+# 
+# 
+# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # up to 61,215 because we added year to 377 features from NW comid 120049464.  Good!
+```
+
+## Define Flooded Land Type and Subtype
+
+Per figure 7.2 in methodology, <8 ha is pond.  Canal/Ditch derived from FTYPE values.
+
+```{r}
+# Define size threshold for ponds.
+# fl.sf <- fl.sf %>% mutate(subtype = case_when(area_ha_original < 8 ~ "freshwater pond",
+#                                               TRUE ~ "reservoir"),
+#                           subtype = case_when(ftype == "CanalDitch" ~ "canals and ditches",
+#                                               TRUE ~ subtype),
+#                           type = case_when(subtype == "reservoir" ~ "reservoir",
+#                                            TRUE ~ "other constructed waterbodies"))
+# 
+# table(fl.sf$type, useNA = "ifany") # no NA, good!
+# table(fl.sf$subtype, useNA = "ifany") # no NA, good!
+
+# number of reservoirs pulled from NWI, NHD, and NAV.
+# this is useful for SuRGE work
+# NHD derived polygons
+# fl.sf %>% st_drop_geometry() %>% filter(comid %in% nhd$comid, type == "reservoir") %>% 
+#   summarise(n.nhd = n(), area.nhd = sum(area_ha_new)) #5,393 polygons; 1,798,962 hectares
+# 
+# # NWI derived polygons
+# fl.sf %>% st_drop_geometry() %>% filter(objectid %in% nwi$objectid, type == "reservoir") %>% 
+#   summarise(n.nwi = n(), area.nwi = sum(area_ha_new)) #70,036 polygons; 6,928,507 hectares
+
+# # NAV derived polygons
+# nav %>% st_drop_geometry() %>% 
+#   mutate(area_ha_original = original_area_meters / 10000,
+#          area_ha_new = area_meters / 10000) %>% 
+#   filter(area_ha_original > 8) %>% 
+#   summarize(n.nav = n(), area.nav = sum(area_ha_new)) # 31,119 polygons; 1,620,218 hectares
+# 
+# # write flooded land inventory to disk
+# st_write(fl.sf, "output/2023_Flooded_Lands_Inventory_Final_121923.gpkg")
+```
+
+
+## Set Up Time Series Infrastructure
+Emissions/removals must be calculated for each year in the time series.  Reservoir age is extracted from NID.  When age not available we assume > 20.
+
+```{r, results="hide"}
+fl.df <- fl.sf %>% st_drop_geometry() # drop geometry to simplify things are reduce memory
+format(object.size(fl.df), units = "GB") # 1.1GB
+nrow(fl.df) # 6,535,554 good
+
+# EACH YEAR AS LIST ELEMENT
+# Need to calculate emission separately for each year in time series
+# Put copy of dataframe version sf object into 33 separate list elements.  Each element represents
+# one calculation year.
+fl <- map(.x = rep("fl.df", 33), .f = get) # `get` will find all instances of X, map dumps into list
+tic() # weird, takes a while for operation to roll, but then tic toc reports 0.003 seconds
+names(fl) <- 1990:2022 # name each list element.  
+toc()
+format(object.size(fl), units = "auto") #277.9 GB as sf objects (outdated, actually bigger), 35.7 GB as dataframe!
+
+# add calculation year as a column in each list element
+for (i in 1: length(fl)) { # do all elements simultaneously
+  fl[[i]]$calc_year = as.numeric(names(fl[i]))  
+}
+
+
+# Calculate waterbody age for each calculation year
+# More recent years should have more waterbodies due to recent construction.
+# First, how many records per list element now
+lapply(fl, function(x) nrow(x)) #6,535,554 rows
+
+# with list elements as dataframes.  
+# lapply takes 1.5 min
+# future_map doesn't make any progress.
+# map takes 1.7 minutes
+
+# with list elements as sf objects.  
+# lapply: quit after 75 minutes
+# future_map doesn't make any progress.
+# map takes [6% complete at 6 minutes = ~ 100 minutes to complete]
+
+tic() # 1.7 minutes
+with_progress({ # add progress bar
+  p <- progressor(steps = length(fl))
+  
+  fl <- map(fl, ~{ # calculate age per calculation year
+    p()
+    .x %>% mutate(age = calc_year - year) %>%
+      # only keep reservoirs that existed in particular calc_year.  Lots
+      # of systems with no age info, lets keep all of those.
+      filter(age >= 0 | is.na(age)) %>% # removes years with negative age
+      mutate(lu = ifelse(age >= 20 | is.na(age), #if no age, then assume old
+                         "Flooded Land Remaining Flooded Land",
+                         "Land Converted to Flooded Land"))
+  })
+})
+toc()
+
+lapply(fl, function(x) nrow(x)) #6,535,553 in 2022, but only 6,532,439 in 1990. That is good, but we lost 1 record?
+# lost record is objectid 3930338, created in 2023!  Our inventory only goes through 2022, so this make sense!
+unique(fl[[29]]$lu)
+table(fl[[29]]$lu)
+
+
+```
+
+## Emisssion and Removal Emission Factors
+
+IPCC default emission factors are based on Flooded Land age, Flooded Land size, and climate zone.  Flooded Lands greater than 20 years old are considered "Flooded Lands Remaining Flooded Lands", whereas Flooded Lands less than 20 years old are classified as "Lands Converted to Flooded Lands".  
+
+### Land Converted to Flooded Land
+#### Reservoirs
+The CH~4~ emission factor is greater for Land Converted to Flooded Land than for Flooded Lands Remaining Flooded Lands.  CO~2~ emissions are also estimated for this land use category, but not for Flooded Lands Remaining Flooded Lands.  Emission factors are dissagregated by the six major climate zones.
+
+#### Other Constructed Waterbodies
+No emission factors are provided for 'Other Constructed Waterbodies' in this land-use category.  IPCC guidance says to use Flooded Land Remaining Flooded Land values for CH4.  IPCC guidance says to use use `Land Converted to Flooded Land - reservoirs` CO2 emission factors for freshwater pond CO2 emission factors, but provides no guidance for other constructed water bodies.
+
+### Flooded Land Remaining Flooded Land
+#### Reservoirs
+CO~2~ emissions are not estimated for Flooded Land Remaining Flooded Land.  CH~4~ emission factors are dissagregated by the six major climate zones present in the US.
+
+#### Other Constructed Waterbodies
+Flooded Lands less than 8 Ha are classified as freshwater ponds for this inventory and have a single emission factor.  Canals and ditches,  derived from NHD FTYPE and shape, have a singe emission factor.  No downstream emissions for this category.
+
+## Calculate emissions
+###All polygons
+
+```{r, results="hide"}
+# Read in emission factors
+ef <- readxl::read_excel("flooded_lands/inputData/defaultEmissionFactors.xlsx") %>%
+  select(subtype, lu, climate, co2.tonnes.ha.y, ch4.tonnes.ha.y)
+
+# record nrow of fl list prior to merge.  Should be identical after merge.
+n.row.prior <- map_dbl(fl, function(x) nrow(x))
+
+# Merge emission factors with each list element.
+# join is faster than merge
+tic() # 2 minutes
+with_progress({ # add progress bar
+  p <- progressor(steps = length(fl))
+  fl.e <- map(fl, ~{
+    p()
+    .x %>% left_join(., ef)
+  })
+})
+toc()
+
+
+# Make sure no records were lost during merge
+# LOOKS GOOD
+n.row.prior == map_dbl(fl.e, function(x) nrow(x))
+
+# Calculate emissions
+# Downstream emissions are calculated as 9% of surface emissions.
+tic() # 35 seconds
+with_progress({ # add progress bar
+  p <- progressor(steps = length(fl.e)) 
+  fl.e <- map(fl.e, ~{
+    p()
+    .x %>% mutate(co2.tonnes.y = area_ha_new * co2.tonnes.ha.y,
+                  ch4.surface.tonnes.y = area_ha_new * ch4.tonnes.ha.y,
+                  ch4.dn.tonnes.y = case_when(type == "other constructed waterbodies" ~ 0, # no DN for 'other'
+                                              type == "reservoir" ~ ch4.surface.tonnes.y * 0.09, # reservoirs
+                                              TRUE ~ 99999999), # if I screwed up, then 9999999, check for this value 
+                  ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y)
+  })
+})
+toc()
+
+map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
+```
+
+### Aggretate as needed
+#### Set up a few things
+```{r, results="hide"}
+# We want all states to have an area value for each type (res, pond, ditch), even
+# if the value is 0.  Create a full matrix of type by state for joining with area calculations.
+# this may not be necessary, but this way states will know their area isn't missing,
+# but may have 0 for some things.
+
+# 1. df of all states in our inventory
+st_crosswalk$name 
+# remove "Guam and CNMI" and "US Virgin Islands".  Could add back in, but spreadsheet
+# isn't set up to accomodate these additional areas yet.
+st_crosswalk_no_GU_VQ <- st_crosswalk %>% filter(!(name %in% c("Guam and CNMI", "US Virgin Islands")))
+
+# 2. vector of unique 'type' values
+types <- lapply(fl.e, function(x) unique(x$subtype)) %>%
+  do.call("cbind", .) %>% as.vector(.) %>% unique()
+
+# 3. create full grid
+full.state.type.grid <- expand.grid(types, st_crosswalk_no_GU_VQ$name) %>% 
+  rename(type = Var1, name = Var2) 
+```
+
+##### All Flooded Land Surface Area and EFs by state, climate, type, subtype, and lu
+This is written out to state specific tabs in Excel file.  See 'Write to Excel' section.
+```{r, results="hide"}
+# updated for 1990_2022
+
+# First, write surface area and emission factor data to Excel for each state
+# per Tom's request.
+
+# Calculate area by LU, state, subtype, climate
+fl.cl.area <- lapply(fl.e, function(x) {
+  # calculate area by state
+  x %>% dplyr::group_by(lu, subtype, name, climate) %>% # name = state
+    summarize(area = sum(area_ha_new))  %>% # sum by group
+    mutate(area = replace(area, is.na(area), 0),  # replace NA with 0
+           # restore type column
+           type = case_when(subtype %in% c("freshwater pond", "canals and ditches") ~ "other constructed waterbodies", 
+                            subtype == "reservoir" ~ "reservoir",
+                            TRUE ~ "FLY YOU FOOLS"))
+})
+
+# append calculation year to the name of the area variable
+for (i in 1:length(fl.cl.area)) { # for each list element
+  names(fl.cl.area[[i]])[names(fl.cl.area[[i]]) == "area"] = paste0("area", names(fl.cl.area[i])) # combine "area" with list element name (which is calculation year)
+}
+
+
+# FL area table with climate and emission factor
+fl.cl.area.state.type <- fl.cl.area %>%
+  reduce(full_join) %>% # merge all elements of list into single df.
+  merge(., ef %>% rename(CO2.emission.factor.tonnes.co2.ha.y = co2.tonnes.ha.y,
+                         CH4.emission.factor.tonnes.ch4.ha.y = ch4.tonnes.ha.y)) %>%
+  mutate(across(contains("area"), ~replace(.x, is.na(.x), 0))) %>% # replace NA with 0
+  arrange(lu, name, type, subtype, climate) %>% # sort rows
+  relocate(lu, name, type, subtype, climate) %>% # move columns
+  as.data.frame() # remove tibble stuff, messes with writing to excel
+
+unique(fl.cl.area.state.type$type) # no FLY YOU FOOLS, so good!
+
+```
+
+##### Flooded Land Remaining Flooded Land CH4 flux National Summary Table By subtype and Flux Type
+This table is written 7.3.1_FLRFL_summary tab of Excel document.  Does not appear in text.
+```{r, results="hide"}
+# updated for 1990-2022
+
+# National summary table for state by state Excel file
+flrfl.ch4.national.subtype.l <- 
+  lapply(fl.e, function(x) {
+    x %>% 
+      filter(lu == "Flooded Land Remaining Flooded Land") %>%
+      select(-ch4.tonnes.ha.y) %>% # remove emission factor column, makes across() below easier
+      group_by(subtype) %>%
+      summarise(across(contains("ch4"), ~sum(.x)/1000)) %>% # scale to ktonnes ch4
+      # rename to ktonnes ch4
+      rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), .cols = contains("tonnes"))
+  })
+
+# append calculation year to the name of the area variable
+for (i in 1:length(flrfl.ch4.national.subtype.l)) { # for each list element
+  # select column names containing 'ch4'
+  names(flrfl.ch4.national.subtype.l[[i]])[grepl("ch4", names(flrfl.ch4.national.subtype.l[[i]]))] =
+    # append name with list element name (calculation year)
+    paste0(names(flrfl.ch4.national.subtype.l[[i]])[grepl("ch4", names(flrfl.ch4.national.subtype.l[[i]]))],
+           names(flrfl.ch4.national.subtype.l[i])) 
+}
+
+
+# FLRFL national emissions table
+# ch4 in ktonnes.year
+flrfl.ch4.national.subtype <- flrfl.ch4.national.subtype.l %>% 
+  reduce(full_join) %>% # merge all elements of list into single df.
+  pivot_longer(!subtype, names_to = "flux.type", values_to = "flux") %>%
+  mutate(year = substr(flux.type, 
+                       start = nchar(flux.type) - 3, 
+                       stop = nchar(flux.type)),
+         flux.type = ifelse(grepl("dn", flux.type),
+                            "downstream",
+                            ifelse(grepl("surface", flux.type),
+                                   "surface",
+                                   ifelse(grepl("total", flux.type),
+                                          "total",
+                                          "oops!")))) %>%
+  pivot_wider(names_from = year, values_from = flux) %>%
+  arrange(desc(subtype), desc(flux.type)) %>%
+  mutate(Activity = paste(subtype, flux.type) %>% # creating column to match 8/27/21 wirth e-mail
+           ifelse(grepl("total", .), # if total in Activity
+                  substr(x = ., start = 1, stop = nchar(.) - 6), #" .*$", "", .), # grab everything before " total"
+                  .) %>% # else dont change anything
+           ifelse(grepl("surface", .),
+                  "surface",
+                  .) %>%
+           ifelse(grepl("downstream", .),
+                  "downstream",
+                  .)) %>%
+  relocate(Activity)
+
+unique(flrfl.ch4.national.subtype$flux.type) # no "oops!", good
+```
+
+
+##### Land Converted to Flooded Land GHG flux National Summary Table By subtype and Flux Type
+This table is written to 7.3.2_LCFL_summary tab of Excel document  in "Write to Excel" section below.  Does not appear in text.
+```{r, results="hide"}
+
+# Updated for 1990-2022
+
+# Execute on list first, then collapse to df below
+lcfl.ghg.national.subtype.l <-
+  lapply(fl.e, function(x) {
+    x %>%
+      filter(lu == "Land Converted to Flooded Land") %>%
+      select(-ch4.tonnes.ha.y, -co2.tonnes.ha.y) %>% # remove emission factor column, makes across() below easier
+      group_by(subtype) %>%
+      summarise(across(contains("ch4"), ~sum(.x)/1000), # scale to ktonnes ch4
+                co2.mmt.y = sum(co2.tonnes.y)/1000000, # scale to MMT CO2
+                co2.mmtc. = (sum(co2.tonnes.y)/1000000)*(12/44)) %>% # scale to MMT CO2-C
+      # rename to ktonnes
+      rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), .cols = contains("tonnes"))
+  })
+
+# append calculation year to the name of the flux variables
+for (i in 1:length(lcfl.ghg.national.subtype.l)) { # for each list element
+  # select column names containing 'ch4'
+  names(lcfl.ghg.national.subtype.l[[i]])[grepl(c("ch4|co2"), names(lcfl.ghg.national.subtype.l[[i]]))] =
+    # append name with list element name (calculation year)
+    paste0(names(lcfl.ghg.national.subtype.l[[i]])[grepl(c("ch4|co2"), names(lcfl.ghg.national.subtype.l[[i]]))],
+           names(lcfl.ghg.national.subtype.l[i]))
+}
+
+
+# lcfl national emissions table
+# ch4 and CO2 in ktonnes.year
+lcfl.ghg.national.subtype <- lcfl.ghg.national.subtype.l %>%
+  reduce(full_join) %>% # merge all elements of list into single df.
+  pivot_longer(!subtype, names_to = "flux.type", values_to = "flux") %>%
+  mutate(year = substr(flux.type,
+                       start = nchar(flux.type) - 3,
+                       stop = nchar(flux.type)),
+         gas = ifelse(grepl("co2", flux.type),
+                      "co2",
+                      ifelse(grepl("ch4", flux.type),
+                             "ch4",
+                             "oops")),
+         units = ifelse(grepl("ktonnes", flux.type),
+                        "ktonnes",
+                        ifelse(grepl("mmt.", flux.type, fixed = TRUE), # fixed needed or '.' is ignored
+                               "mmt",
+                               ifelse(grepl("mmtc", flux.type),
+                                      "mmtc",
+                                      "oops!"))),
+         flux.type = ifelse(grepl("dn", flux.type),
+                            "downstream",
+                            ifelse(grepl(c("surface|co2"), flux.type),
+                                   "surface",
+                                   ifelse(grepl("total", flux.type),
+                                          "total",
+                                          "oops!")))) %>%
+  pivot_wider(names_from = year, values_from = flux) %>%
+  arrange(desc(subtype), gas, desc(flux.type)) %>%
+  # creating column to match 8/27/21 wirth e-mail
+  mutate(Activity = paste(subtype, flux.type) %>% # piped into ifelse()
+           ifelse(grepl("total", .), # if total in Activity
+                  substr(x = ., start = 1, stop = nchar(.) - 6), #" .*$", "", .), # grab everything before " total"
+                  .) %>% # else dont change anything
+           ifelse(grepl("surface", .),
+                  "surface",
+                  .) %>%
+           ifelse(grepl("downstream", .),
+                  "downstream",
+                  .)) %>%
+  relocate(Activity)
+
+unique(lcfl.ghg.national.subtype$flux.type) # no "oops!", good
+unique(lcfl.ghg.national.subtype$gas) # no "oops!", good
+unique(lcfl.ghg.national.subtype$units) # no "oops!", good
+```
+### Write to Excel
+```{r, results="hide"}
+# Write data to Excel
+
+# The comment below was developed for 1990-2021 inventory when using
+# openxlsx.  Upgrading to openxlsx2 cleared up many issues when writing to
+# Excel, not sure if step below is still required.
+
+# Lots of hidden objects and external workbook links in sheets provided by
+# OAR.  These must be deleted or they complicate `openxlsx` functions.  Use 
+# macro at https://support.microsoft.com/en-us/office/
+# hidden-names-found-7934441b-9eda-4d6c-bd46-a11a2e148e7b?ui=en-us&rs=en-us&ad=us
+# clean the file.
+
+# Read excel file where output should be placed.
+file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx"
+wb <- wb_load(file)
+sheets <- openxlsx2::wb_get_sheet_names(wb)
+
+# 1. WRITE SURFACE AREAS AND EFs FOR FLRFL AND LCFL TO STATE SPECIFIC SHEETS
+# Before running this, delete values from A6:AL19, A31:AL41 in each state tab
+
+# Sheet names states in inventory
+stateNames <- st_crosswalk_no_GU_VQ %>% 
+  rename(state_abbr = stusps) %>%
+  arrange(name)
+
+# openxlsx2
+for (i in 1:nrow(stateNames)){ # very fast
+  
+  sheet.i <- sheets[endsWith(sheets, stateNames$state_abbr[i])]
+  
+  # write FLRFL
+  openxlsx2::write_data(wb,
+                        sheet = sheet.i,
+                        x = fl.cl.area.state.type %>% 
+                          filter(lu == "Flooded Land Remaining Flooded Land",
+                                 name == stateNames$name[i]) %>%
+                          select(-contains("co2")),  
+                        rowNames = FALSE, colNames = FALSE,
+                        startRow = 6, startCol = 1,
+                        withFilter = FALSE)
+  
+  # write LCFL
+  openxlsx2::write_data(wb,
+                        x = fl.cl.area.state.type %>% 
+                          filter(lu == "Land Converted to Flooded Land",
+                                 name == stateNames$name[i]) %>%
+                          # CO2 emission factor after CH4 emission factor to be 
+                          # consistent with Excel templates.
+                          relocate(CO2.emission.factor.tonnes.co2.ha.y, .after = last_col()),
+                        sheet = sheet.i, # pull name from list
+                        rowNames = FALSE, colNames = FALSE,
+                        startRow = 31, # Will be below longest FLRFL table
+                        startCol = 1)
+  
+  print(paste0("data_added-", i)) # progress updates
+}
+
+
+
+
+# 2. WRITE FLOODED LAND REMAINING FLOODED LAND NATIONAL CH4 FLUX TABLE
+# To be conservative, delete values from B13:AI25 before running
+# openxlsx2
+openxlsx2::write_data(wb,
+                      x = flrfl.ch4.national.subtype %>%
+                        select(-flux.type, -subtype), 
+                      sheet = "7.3.1_FLRFL_summary",
+                      rowNames = FALSE, colNames = TRUE,
+                      startRow = 13, 
+                      startCol = 2)
+
+# 3. WRITE LAND CONVERTED TO FLOODED LAND NATIONAL CH4 FLUX TABLE
+# To be conservative, delete values from B13:AI22 before running
+# openxlsx2
+openxlsx2::write_data(wb,
+                      x = lcfl.ghg.national.subtype %>%
+                        filter(gas == "ch4") %>%
+                        select(-flux.type, -subtype, -gas, -units),
+                      sheet = "7.3.2_LCFL_summary",
+                      rowNames = FALSE, colNames = TRUE,
+                      startRow = 13, 
+                      startCol = 2)
+
+# 4. WRITE LAND CONVERTED TO FLOODED LAND NATIONAL CO2 FLUX TABLE
+# To be conservative, delete values from B46:AI49 before running
+# openxlsx2
+openxlsx2::write_data(wb,
+                      x = lcfl.ghg.national.subtype %>%
+                        filter(gas == "co2", units == "mmt", 
+                               subtype != "canals and ditches") %>% # no CO2 for canals and ditches
+                        select(-flux.type, -Activity, -gas, -units) %>%
+                        rename(Activity = subtype),
+                      sheet = "7.3.2_LCFL_summary",
+                      rowNames = FALSE, colNames = TRUE,
+                      startRow = 46, 
+                      startCol = 2)
+
+openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+
+```
+
+
+# Text for report
+###Flooded Land Remaining Flooded Land
+#### Reservoirs: Emissions and Removals from Flooded Land Remaining Flooded Land
+In 2022 the conterminous United States hosted `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2022) %>% summarize(tot.area = sum(.)) %>% pull() / 1000000` million hectares of reservoirs in the Flooded Land Remaining Flooded Land category.  These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull()` six of the aggregated climate zones used to define flooded land emission factors.
+
+See "#####TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state" below for stats on relative emissions from Texas, Florida, and Louisiana.
+
+Methane emissions from reservoirs in Flooded Land Remaining Flooded Land increased `r flrfl.ch4.national.subtype %>% clean_names %>% filter(subtype == "reservoir", flux_type == "total") %>% mutate(percent.increase = ((x2022 - x1990)/x1990)*100) %>% select(percent.increase) %>% pull()` percent from 1990 to 2022 due to the matriculation of reservoirs in Land Converted to Flooded Land to Flooded Land Remaining Flooded Land.
+
+
+#####FIGURE: Climate zone and Flooded lands map
+```{r, results="hide"}
+# GGPLOT2 + TIGRIS GET US MOST OF THE WAY THERE, BUT AK, HI, AND PR
+# ARE NOT LABELED.  MAPSF DOES IT ALL, BUT MUCH MORE COMPLICATED
+
+# GGPLOT + TIGRIS APPROACH------------------
+# data for US state map
+# get state boundary
+# us <- USAboundaries::us_states() %>% # get states map
+#   st_transform(4326)#  as above, same as climate
+# 
+# us_line <- us %>% st_cast("MULTILINESTRING") %>%
+#   tigris::shift_geometry()
+# 
+# state.clime <- st_intersection(us, climate) %>% # clip climate map to US
+#   tigris::shift_geometry() # shifts AK, HI, and PR below contiguous US
+# 
+# 
+# # SMALL SAMPLE FOR CODE DEVELOPMENT
+# # 1. determine age of each polygon in 2021, derive lu in 2021 for each polygon,
+# #    filter to FLRFL
+# fl.sf.small <- fl.sf %>% 
+#   mutate(age = 2021 - year, # 2021 year
+#          # lu in 2021
+#          lu = case_when(age > 20 | is.na(age) ~ "Flooded Land Remaining Flooded Land", # keep NA
+#                         TRUE ~ "Land Converted to Flooded Land")) %>% 
+#   filter(type == "reservoir", # only reservoirs for this piece
+#          lu == "Flooded Land Remaining Flooded Land") %>% # only FLRFL
+#   group_by(name) %>% # group by state
+#   slice_sample(prop = 0.01, replace = FALSE) %>% #1% of polygons in each state
+#   ungroup() %>%
+#   tigris::shift_geometry() # shift AK, HI, and PR below conterminous US
+# 
+# # 3. plot
+# ggplot() +
+#   geom_sf(data = state.clime, aes(fill = climate), color = NA) +
+#   geom_sf(data = us_line, color = "darkgrey") +
+#   geom_sf(data = fl.sf.small, 
+#           fill = "black", color = "black") +
+#   coord_sf(datum = NA) + # this removes grid lines.
+#   theme(panel.background = element_blank(), # remove grey panel background
+#         legend.title = element_blank()) # remove legend title
+
+# MAPSF APPROACH------------------
+us <- USAboundaries::us_states()
+
+# State boundaries for overlay
+sb <- us %>%
+  st_cast("MULTILINESTRING")
+
+# Colors for climate zones
+cz.colors <- data.frame(zone = c("boreal","cool temperate","tropical dry/montane",
+                                 "tropical moist/wet", "warm temperate dry","warm temperate moist"),
+                        color = c("#1b9e77","#66a61e","#e7298a","#7570b3","#d95f02","#e6ab02"))
+
+# Import Climate Zones
+climate <- climate %>%
+  st_transform(st_crs(us)) %>%
+  st_make_valid() %>%
+  left_join(cz.colors, by = c("climate"="zone"))
+
+# Intersect Climate zone with states
+us.cz <- st_intersection(us, climate)
+
+# BREAK GEOGRAPHIES FOR INSETS AND PROJECT-
+# Define FLRFL in 2022
+flrfl.2022 <- fl.sf %>% 
+  mutate(age = 2022 - year, # 2022 year
+         # lu in 2022
+         lu = case_when(age > 20 | is.na(age) ~ "Flooded Land Remaining Flooded Land", # keep NA
+                        TRUE ~ "Land Converted to Flooded Land")) %>% 
+  filter(type == "reservoir", # only reservoirs for this piece
+         lu == "Flooded Land Remaining Flooded Land") 
+
+
+# CONUS
+conus <- us.cz %>% # state + climate polygons.  plots with color = NA to hide border lines
+  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+conus.lines <- sb %>% # state border lines, no border lines for climate
+  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+
+conus.fl <- flrfl.2022 %>%  # flooded lands
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070) 
+
+# Alaska
+alaska <- us.cz %>%
+  filter(state_name == "Alaska")%>%
+  st_transform(3467)
+
+alaska.lines <- sb %>%
+  filter(state_name == "Alaska") %>%
+  st_transform(3467) %>%
+  st_cast("MULTILINESTRING")
+
+alaska.fl <- flrfl.2022 %>%
+  filter(name == "Alaska") %>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.cz %>%
+  filter(state_name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+hawaii.lines <- sb %>%
+  filter(state_name == "Hawaii") %>%
+  st_transform(crs = 32604) %>%
+  st_cast("MULTILINESTRING")
+
+hawaii.fl <- flrfl.2022 %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.cz %>%
+  filter(state_name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+pr.lines <- sb %>%
+  filter(state_name == "Puerto Rico") %>%
+  st_transform(crs = 32619) %>%
+  st_cast("MULTILINESTRING")
+
+pr.fl <- flrfl.2022 %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+# MAKE MAP MFMAP---
+## Create a theme
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+mf_export(x = conus,
+          filename = "output/figures/climateMapFLRFL.png",
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
+# mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = unique(conus$color), # duplicate color records per climate zone, must use unique
+       leg_pos = NA)
+mf_map(x = conus.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(x = conus.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1.5)
+mf_inset_off()
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = hawaii$color,
+       leg_pos = NA)
+mf_map(x = hawaii.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(hawaii.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.06, 0.2)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = pr$color,
+       leg_pos = NA)
+mf_map(x = pr.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(pr.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset?
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+# close the inset
+mf_inset_off()
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.08,0.42)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = alaska$color,
+       leg_pos = NA)
+mf_map(x = alaska.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(alaska.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset?
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+# Add Map Title
+# mf_title("Climate Zones of the U.S.",cex = 2)
+
+# Add Credits
+# mf_credits(txt = paste0("Generated on: ",Sys.Date(),", Data Sources: IPCC, U.S. EPA"),
+#            pos = "bottomright", cex = 1)
+
+mf_inset_on(us, fig = c(0,0.3,0.45,0.9))
+
+mf_legend(type = "typo", pos = "left",
+          val = cz.colors$zone, pal = cz.colors$color,
+          title = "Climate Zone",
+          val_cex = 1.5, title_cex = 2)
+mf_inset_off()
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/climateMapFLRFL.png")
+
+```
+
+
+
+#####TABLE::  CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs
+Total CH4 emissions from reservoirs in FLRFL are shown in the text in both kt CH4 and MMT CH4-CO2-eq.  These tables are the top two tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Here I recreated the kt CH4 table as a check against the Excel calculations.
+
+```{r}
+# PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
+flrfl.ch4.national.subtype %>% 
+  filter(subtype == "reservoir") %>%
+  select(Activity, subtype, flux.type, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
+  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangemen
+         across(where(is.numeric), round)) %>%
+  arrange(flux.type) %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs"), 
+    subtitle = md("subtitle?")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  opt_stylize(style = 1, color = "blue") 
+  
+  
+
+```
+
+#####FIGURE::  Aggregated reservoir emissions plotted by state.
+```{r, results="hide"}
+# Calculate total reservoir CH4 emissions by state for 2022
+flrfl.total.ch4.2022.reservoir <- fl.e$`2022` %>% 
+  filter(lu == "Flooded Land Remaining Flooded Land",
+         type == "reservoir") %>%
+  dplyr::group_by(name) %>% 
+  summarize(ch4.total.tonnes.y = sum(ch4.total.tonnes.y, na.rm = T))  %>% # sum by group
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>% # expand to include every state, even if area is NA (which means 0)
+  mutate(ch4.total.tonnes.y = replace(ch4.total.tonnes.y, is.na(ch4.total.tonnes.y), 0), # replace NA with 0
+         ch4.total.ktonnes.y = ch4.total.tonnes.y / 1000) %>% # unit conversion
+  arrange(name)
+
+
+# Creating palette function based on rColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+
+flrfl.total.ch4.2022.reservoir <- flrfl.total.ch4.2022.reservoir %>%
+  mutate(color = pal.blues(scales::rescale(ch4.total.ktonnes.y))) # must rescale from 0-1
+
+# add emissions and color data to object
+us.plot.flrfl.total.ch4.2022.reservoir <- merge(us, 
+                                                flrfl.total.ch4.2022.reservoir) 
+# preview colors
+# us.plot.flrfl.total.ch4.2022.reservoir %>% select(name, color, contains("ktonn")) %>% arrange(ch4.total.ktonnes.y) %>% st_drop_geometry() 
+
+
+# CONUS
+conus <- us.plot.flrfl.total.ch4.2022.reservoir %>% # state + CH4
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.flrfl.total.ch4.2022.reservoir %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.flrfl.total.ch4.2022.reservoir %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.flrfl.total.ch4.2022.reservoir %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+
+# MAKE MAP MFMAP---
+## Create a theme
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+mf_export(x = conus,
+          filename = "output/figures/FLRFL.reservoir.2022.Tch4.png",
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "name", type = "typo",
+       border = "black", # state borders
+       pal = conus$color, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1.5)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.08, 0.2)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = pr$color, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.08,0.42)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state border
+       pal = alaska$color, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+# Add Map Title
+# mf_title("Climate Zones of the U.S.",cex = 2)
+
+# Add Credits
+# mf_credits(txt = paste0("Generated on: ",Sys.Date(),", Data Sources: IPCC, U.S. EPA"),
+#            pos = "bottomright", cex = 1)
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.45,0.9))
+
+val.legend <-  seq(0, max(us.plot.flrfl.total.ch4.2022.reservoir$ch4.total.ktonnes.y), by = 1)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend, 
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(kt~CH[4]~y^-1),
+          val_cex = 1.5, title_cex = 1.5)
+mf_inset_off()
+
+dev.off()
+
+# ggplot(us.plot.flrfl.total.ch4.2021.reservoir) +
+#   geom_sf(aes(fill = ch4.total.ktonnes.y)) +
+#   scale_fill_distiller(expression(kt~CH[4]~y^-1), 
+#                        palette = "Blues", direction = 1) +
+#   coord_sf(datum = NA) + # this removes grid lines.
+#   theme(panel.background = element_blank())
+# 
+# ggsave("output/figures/FLRFL.reservoir.2021.Tch4.tiff")
+```
+
+```{r}
+
+# Load and render figure in markdown
+knitr::include_graphics("output/figures/FLRFL.reservoir.2022.Tch4.png")
+
+```
+
+#####TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state
+This table is written to "inventoryReportTablesFormattedFromR.xlsx", sheet = "FLRFL.res.ch4.by.stat", formatted, then pasted as table 6-75 in the report.
+Check the totals calculate by Excel against the top table in the tables tab of FloodedLands-Output_90-22_write_to_from_R.xlsx.
+```{r}
+flrfl.ch4.2022.reservoir.state <- 
+  fl.e$`2022` %>%  
+  filter(type == "reservoir",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, ch4.surface.tonnes.y, ch4.dn.tonnes.y) %>%
+  group_by(name) %>%
+  summarize(ch4.surface.tonnes.y = sum(ch4.surface.tonnes.y), 
+            ch4.dn.tonnes.y = sum(ch4.dn.tonnes.y)) %>%
+  mutate(ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y) %>%
+  mutate(across(where(is.numeric), ~.x/1000)) %>% # convert to kt
+  rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), 
+              .cols = contains("tonnes")) 
+
+# Create GT table of data
+gt(flrfl.ch4.2022.reservoir.state) %>%
+  tab_header(title = md(
+    "FLRFL Reservoirs CH4 Emissions"), 
+    subtitle = md("kt by mechanism (dn, surface) and state")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+    cols_label(
+    name = "state", 
+    ch4.surface.ktonnes.y = "surface",
+    ch4.dn.ktonnes.y = "dn", 
+    ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "cyan") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = flrfl.ch4.2022.reservoir.state,
+#                       sheet = "FLRFL.res.ch4.by.stat",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+# TX, FL, LA proportion of total for text
+flrfl.ch4.2022.reservoir.state %>% 
+  ungroup() %>%
+  filter(name %in% c("Texas", "Florida", "Louisiana")) %>%
+  summarize(ch4.tot = sum(ch4.total.ktonnes.y)) %>% pull() /
+  sum(flrfl.ch4.2022.reservoir.state$ch4.total.ktonnes.y) 
+
+
+```
+
+
+#### Methodology
+##### Area Estimates
+Reservoir age in FLRFL Flooded land age was determined from data in the NID when available (`r fl.e %>% pluck("2022") %>% filter(!is.na(year), type == "reservoir") %>% summarize(total.n = n()) %>% pull()` out of `r  fl.e %>% pluck("2022") %>% filter(type == "reservoir") %>% summarize(total.n = n()) %>% pull()`).  
+
+The surface area of reservoirs in Flooded Land Remaining Flooded Land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase)` 6 percent from 1990 to 2022 due to reservoirs matriculating into Flooded Land Remaining Flooded Land when they reached 20 years of age.
+
+######TABLE:: National Flooded Land Area for Reservoirs
+```{r}
+# This table appears only in text.  Manually type values into .docx table, or write to clipboard, then paste.
+fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(subtype, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(subtype) %>% # reservoir is only subtype in type == reservoir, thus not necessary
+  summarize(across(contains("area"), ~round(sum(.)/1000000, 2))) %>%
+  arrange(desc(subtype)) %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "National Flooded Land Area for Reservoirs"), 
+    subtitle = md("subtitle?")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  opt_stylize(style = 3, color = "pink") 
+
+```
+
+######TABLE:: Flooded Land Remaining Flooded Land Area for Reservoirs by State: abbreviated time series
+This table is written to "inventoryReportTablesFormattedFromR.xlsx", sheet == FLRFL-res.area.by.state, formatted, then pasted as table 6-85 in the report. This table contains only 1990, 2005, 2018-2022.
+Compare total row to top table in FloodedLands_Output_90-22_write_to_from_R.xlsx, sheet == 7.3.1_FLRFL_summary.  Values written below should be smaller than those in 7.3.1_FLRFL_summary because they don't include ponds or canals.
+```{r}
+
+flrfl.area.reservoir.state <- 
+  fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, type, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.)/1000000)) 
+
+  # Create GT table of data
+  gt(flrfl.area.reservoir.state) %>%
+  tab_header(title = md(
+    "Flooded Land Remaining Flooded Land Area for Reservoirs by State"), 
+    subtitle = md("abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 4, color = "green") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                     x = flrfl.area.reservoir.state,
+#                     sheet = "FLRFL-res.area.by.state",
+#                     rowNames = FALSE, colNames = TRUE,
+#                       startRow = 1, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+######TABLE:: Flooded Land Remaining Flooded Land Area for Reservoirs by State: all years
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL-res.area.by.state.
+```{r}
+flrfl.area.reservoir.state.all <- 
+  fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, type, matches(paste(1990:2022, collapse = "|"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.)/1000000)) %>%
+  rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
+  rename(state = name) 
+  # Create GT table of data
+  
+  gt(flrfl.area.reservoir.state.all) %>%
+  tab_header(title = md(
+    "Flooded Land Remaining Flooded Land Area for Reservoirs by State"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 5, color = "red") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                     x = flrfl.area.reservoir.state.all,
+#                     sheet = "FLRFL-res.area.by.state",
+#                     rowNames = FALSE, colNames = TRUE,
+#                       startRow = 3, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+##### Uncertainty
+Uncertainty calculations are performed at end of this .Rmd.  This section is a placeholder to provide consistency with text.
+
+#### Other Constructed Waterbodies: Emissions and Removals from Flooded Land Remaining Flooded Land
+
+IMMEDIATELY ABOVE NATIONAL LEVEL CH4 FLUX TABLE
+Methane emissions from ponds increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull()) * 100` 0.65% from 1990-2022
+
+###### TABLE:: National level CH4 flux table
+Total CH4 emissions from OCWB in FLRFL are shown in the text in both kt CH4 and MMT CH4.  These tables are the 3rd and 4th  tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Here I recreated the kt CH4 table as a check against the Excel calculations.
+```{r}
+# FLRFL-other constructed waterbodies ch4 total emissions table National
+# fluxes reported in ktonnes per year
+# PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
+flrfl.ch4.national.subtype %>% 
+  filter(subtype != "reservoir", # NOT reservoir
+         flux.type == "total") %>%
+  select(Activity, subtype, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
+  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) %>%
+  arrange(Activity) %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "National-level CH4 Flux"), 
+    subtitle = md("kt CH4, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  opt_stylize(style = 6, color = "gray") 
+  
+```
+
+
+
+###### TABLE:: State level CH4 flux table
+State level CH4 flux tables are not compiled in Excel.  Table written inventoryReportTablesFormattedFromR.xlsx where it is formatted, then pasted into report table.
+```{r}
+# FLRFL-other constructed waterbodies ch4 total emissions table by state
+# fluxes reported in ktonnes per year
+
+flrfl.ch4.2022.ocwb.state <- 
+  fl.e$`2022` %>%
+  select(name, subtype, type, 
+         lu, ch4.total.tonnes.y) %>%  
+  filter(type == "other constructed waterbodies",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(-lu, -type) %>%
+  group_by(name, subtype) %>% 
+  summarize(ch4.total.tonnes.y = sum(ch4.total.tonnes.y)) %>%
+  pivot_wider(names_from = subtype, 
+              values_from = ch4.total.tonnes.y,
+              values_fill = 0, # replace NA with 0
+              names_prefix = "tonnes_ch4_") %>% 
+  # spaces in variable names causing problems
+  rename_with(~ gsub(pattern = " ", replacement = "_", x = .x), .cols = contains("tonnes")) %>% # replace " " with "_"
+  mutate(ch4.total.tonnes.y = `tonnes_ch4_canals_and_ditches` + `tonnes_ch4_freshwater_pond`) %>%
+  mutate(across(where(is.numeric), ~.x/1000)) %>% # convert to kt
+  rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), 
+              .cols = contains("tonnes")) 
+
+  # Create GT table of data
+gt(flrfl.ch4.2022.ocwb.state %>% ungroup) %>%
+  tab_header(title = md(
+    "State-level CH4 Flux"), 
+    subtitle = md("kt CH4, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  cols_label(
+    name = "state", 
+    ktonnes_ch4_canals_and_ditches = "canals and ditches",
+    ktonnes_ch4_freshwater_pond = "freshwater ponds",
+    ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 1, color = "cyan") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                     x = flrfl.ch4.2022.ocwb.state,
+#                     sheet = "FLRFL.ocwb.ch4.state",
+#                     rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 3)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+# discussion of relative emissions among states
+flrfl.ch4.2022.ocwb.state %>%
+  arrange(desc(ch4.total.ktonnes.y)) %>% 
+  # Create GT table of data
+  ungroup() %>%
+  gt() %>%
+  tab_header(title = md(
+    "State-level CH4 Flux"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+    cols_label(
+    name = "state", 
+    ktonnes_ch4_canals_and_ditches = "canals and ditches",
+    ktonnes_ch4_freshwater_pond = "freshwater ponds",
+    ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "red") 
+
+flrfl.ch4.2022.ocwb.state %>%
+  arrange(desc(ktonnes_ch4_canals_and_ditches)) %>% 
+  ungroup() %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "State-level CH4 Flux"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  cols_label(
+    name = "state", 
+    ktonnes_ch4_canals_and_ditches = "canals and ditches",
+    ktonnes_ch4_freshwater_pond = "freshwater ponds",
+    ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 3, color = "gray") 
+
+flrfl.ch4.2022.ocwb.state %>%
+  arrange(desc(ktonnes_ch4_freshwater_pond)) %>% 
+  ungroup() %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "State-level CH4 Flux"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  cols_label(
+    name = "state", 
+    ktonnes_ch4_canals_and_ditches = "canals and ditches",
+    ktonnes_ch4_freshwater_pond = "freshwater ponds",
+    ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 4, color = "pink") 
+
+
+```
+
+
+
+###### FIGURE: Emissions by state
+
+```{r, results="hide"}
+# 1.  CALCULATE TOTAL OCWB CH4 EMISSIONS BY SUBTYPE AND STATE FOR 2022------------------
+# see above
+flrfl.ch4.2022.ocwb.state # all emissions in kt ch4 year, see above
+
+
+# 2. DEFINE COLORS FOR CHLOROPETH MAP-----------------
+# Creating palette function based onrColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+# calculate color code for each emission value by subtype.
+color.ditch <- data.frame(color.ditch = pal.blues(scales::rescale(flrfl.ch4.2022.ocwb.state$ktonnes_ch4_canals_and_ditches)))
+color.pond <- data.frame(color.pond = pal.blues(scales::rescale(flrfl.ch4.2022.ocwb.state$ktonnes_ch4_freshwater_pond)))
+
+# should be able to calculate color code as below, but gives same color for each emission value???
+# flrfl.ch4.2021.ocwb.state <- flrfl.ch4.2021.ocwb.state %>%
+#   mutate(ditch.scale = scales::rescale(ktonnes_ch4_canals_and_ditches),
+#          pond.scale = scales::rescale(ktonnes_ch4_freshwater_pond)) 
+
+# add color codes to data object
+flrfl.ch4.2022.ocwb.state <- bind_cols(flrfl.ch4.2022.ocwb.state, color.ditch, color.pond)
+
+# add emissions and color data to object
+us.plot.flrfl.ch4.2022.ocwb.state <- merge(us, flrfl.ch4.2022.ocwb.state)
+
+# preview colors
+us.plot.flrfl.ch4.2022.ocwb.state
+
+
+# 3. BREAK GEOGRAPHIES--------------
+# CONUS
+conus <- us.plot.flrfl.ch4.2022.ocwb.state %>% # state + CH4
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.flrfl.ch4.2022.ocwb.state %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.flrfl.ch4.2022.ocwb.state %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.flrfl.ch4.2022.ocwb.state %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+# 4. CREATE MAP THEME-----------------
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+# 5. MAKE CANALS AND DITCHES MAP---------------
+mf_export(x = conus,
+          filename = "output/figures/FLRFL.ocwb.ditch.2022.Tch4.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+
+# #from above
+# mf_export(x = conus,
+#           filename = "output/figures/FLRFL.reservoir.2022.Tch4.png",
+#           width = 1200, expandBB = c(.3,.3,0.1,.1))
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = conus$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = pr$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "name", 
+       type = "typo",
+       border = "black", # state border
+       pal = alaska$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2022.ocwb.state$ktonnes_ch4_canals_and_ditches), -1), by = 1)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = expression(kt~CH[4]~y^-1),
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(A.~CH[4]~Emissions~from~Ditches~and~Canals), 
+         pos = "left",
+         bg = NA,
+         line = 2, # required to get full title to fit in plot space
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load and render figure in markdown
+knitr::include_graphics("output/figures/FLRFL.ocwb.ditch.2022.Tch4.svg")
+
+```
+
+```{r, results="hide"}
+# 6. MAKE PONDS MAP-------------------------
+mf_export(x = conus,
+          filename = "output/figures/FLRFL.ocwb.pond.2022.Tch4.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# for .png
+# mf_export(x = conus,
+#           filename = "output/figures/FLRFL.ocwb.pond.2022.Tch4.png",
+#           width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+# #mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = conus$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = pr$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "name", 
+       type = "typo",
+       border = "black", # state border
+       pal = alaska$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2022.ocwb.state$ktonnes_ch4_freshwater_pond), -1), by = 1)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = expression(kt~CH[4]~y^-1),
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(B.~CH[4]~Emissions~from~Freshwater~Ponds), 
+         pos = "left",
+         bg = NA,
+         line = 2, # required to get full title to fit in plot space
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load and render figure in markdown
+knitr::include_graphics("output/figures/FLRFL.ocwb.pond.2022.Tch4.svg")
+
+```
+
+
+#### Methodology
+
+##### Area
+For the year 2022, this inventory contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of canals and ditches in Flooded Land Remaining Flooded Land.  Area of freshwater ponds increased by `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` Ha as lands matriculated in from the LCFL category.
+
+######TABLE:: National Flooded Land Area for Other Constructed Waterbodies: abbreviated time series
+This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.ocwb.area.national` tab, then paste into .docx table.
+```{r}
+flrfl.ocwb.area.national <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(subtype, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(subtype) %>%
+  summarize(across(contains("area"), sum)) %>%
+  arrange(subtype) %>% 
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "National Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  opt_stylize(style = 5, color = "cyan") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                     x = flrfl.ocwb.area.national,
+#                     sheet = "FLRFL.ocwb.area.national",
+#                     rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 3)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+######TABLE:: National Flooded Land Area for Other Constructed Waterbodies: full time series
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.ocwb.area.national.
+```{r}
+flrfl.ocwb.area.national.all <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(subtype, matches(paste0(1990:2022, collapse = "|"))) %>%
+  group_by(subtype) %>%
+  summarize(across(contains("area"), sum)) %>%
+  arrange(subtype)%>%
+  rename_with(~gsub("area", "", .), .cols = contains("area"))
+
+
+  # Create a GT table of the data
+gt(flrfl.ocwb.area.national.all) %>%
+  tab_header(title = md(
+    "National Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("full time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 6, color = "green") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                     x = flrfl.ocwb.area.national.all,
+#                     sheet = "FLRFL.ocwb.area.national",
+#                     rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 3)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+
+Canals and ditches in the conterminous U.S. are most abundant in the Gulf Coast states and California (Fig. x-xxA.). FLorida contains `r fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land", name == "Florida") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all US canals and ditches. Texas has the greatest surface area of freshwater ponds, equivalent to   `r fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land", name == "Texas") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all freshwater pond surface area in the United States, closely followed by Florida.
+
+######FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
+
+```{r, results="hide"}
+# 1. Make other constructed waterbodies surface area table---------------
+flrfl.ocwb.area <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, subtype, area2022) %>%
+  group_by(name, subtype) %>% # not differentiating by pond vs canals, table too long for report
+  summarize(across(contains("area"), ~sum(.))) %>%
+  pivot_wider(names_from = subtype, 
+              values_from = area2022,
+              values_fill = 0) %>%
+  mutate(ocwb.area = `canals and ditches` + `freshwater pond`)
+
+
+
+# 2. DEFINE COLORS FOR CHLOROPETH MAP--------
+# Creating palette function based onrColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+# calculate color code for each emission value by subtype.
+color.ditch <- data.frame(color.ditch = pal.blues(scales::rescale(flrfl.ocwb.area$`canals and ditches`)))
+color.pond <- data.frame(color.pond = pal.blues(scales::rescale(flrfl.ocwb.area$`freshwater pond`)))
+
+# should be able to calculate color code as below, but gives same color for each emission value???
+# flrfl.ocwb.area <- flrfl.ocwb.area %>%
+#   mutate(ditch.scale = scales::rescale(`canals and ditches`),
+#          pond.scale = scales::rescale(`freshwater pond`))
+
+# add color codes to data object
+flrfl.ocwb.area <- bind_cols(flrfl.ocwb.area, color.ditch, color.pond)
+
+# add emissions and color data to object
+us.plot.flrfl.ocwb.area <- merge(us, flrfl.ocwb.area)
+
+# preview colors
+us.plot.flrfl.ocwb.area
+
+
+# 3. BREAK GEOGRAPHIES------------------------
+# CONUS
+conus <- us.plot.flrfl.ocwb.area %>% # state + CH4
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.flrfl.ocwb.area %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.flrfl.ocwb.area %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.flrfl.ocwb.area %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+# 4. CREATE MAP THEME-----------------------
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+# 5. MAKE CANALS AND DITCHES MAP---------------
+# .svg vector format works, but DMAP won't render a view.  Must download to local computer, then view.
+mf_export(x = conus,
+          filename = "output/figures/FLRFL.ocwb.ditch.2022.area.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = conus$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = pr$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.02,0.38)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "name", 
+       type = "typo",
+       border = "black", # state border
+       pal = alaska$color.ditch, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, round(max(us.plot.flrfl.ocwb.area$`canals and ditches`), -4), # round to nearest 10,000
+#                    by = 10000)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = "hectares",
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(A.~Area~of~Ditches~and~Canals), 
+         pos = "left",
+         bg = NA,
+         line = 2, # required to get full title to fit in plot space
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/FLRFL.ocwb.ditch.2022.area.svg")
+```
+
+```{r, results="hide"}
+# 6. MAKE PONDS MAP-------------------------
+# .svg vector format works, but DMAP won't render a view.  Must download to local computer, then view.
+mf_export(x = conus,
+          filename = "output/figures/FLRFL.ocwb.pond.2022.area.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = conus$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = pr$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.02,0.38)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "name", 
+       type = "typo",
+       border = "black", # state border
+       pal = alaska$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, 
+#                    round(max(us.plot.flrfl.ocwb.area$`freshwater pond`), -5), # round max value to nearest 100,000
+#                    by = 50000)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = "hectares",
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(B.~Area~Freshwater~Ponds), 
+         pos = "left",
+         bg = NA,
+         line = 2, # required to get full title to fit in plot space
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/FLRFL.ocwb.pond.2022.area.svg")
+
+```
+
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: abbreviated time series
+This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.pond.area.by.state` tab, format, then paste into .docx table.
+Compare total row to FLRFL.ocwb.area.national
+```{r}
+flrfl.pond.area.by.state <- fl.cl.area.state.type %>%
+  filter(subtype == "freshwater pond",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.)))
+  
+  
+  # Create a GT table of the data
+gt(flrfl.pond.area.by.state) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  # cols_label(
+  #   name = "state", 
+  #   ktonnes_ch4_canals_and_ditches = "canals and ditches",
+  #   ktonnes_ch4_freshwater_pond = "freshwater ponds",
+  #   ch4.total.ktonnes.y = "total") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 1, color = "red") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = flrfl.pond.area.by.state,
+#                       sheet = "FLRFL.pond.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: all years
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.pond.area.by.state.
+```{r}
+flrfl.pond.area.by.state.all <- fl.cl.area.state.type %>%
+  filter(subtype == "freshwater pond",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, matches(paste0(1990:2022, collapse = "|"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.))) %>%
+  rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
+  rename(state = name) 
+
+  # Create a GT table of the data
+  gt(flrfl.pond.area.by.state.all) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("freshwater ponds by state, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "pink") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = flrfl.pond.area.by.state.all,
+#                       sheet = "FLRFL.pond.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+```
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: abbreviated time series
+This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.canals.area.by.state` tab, format, then paste into .docx table.
+```{r}
+flrfl.canal.area.by.state <- fl.cl.area.state.type %>%
+  filter(subtype == "canals and ditches",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.))) 
+
+# Create a GT table of the data
+gt(flrfl.canal.area.by.state) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("canals and ditches by state, abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 3, color = "red") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = flrfl.canal.area.by.state,
+#                       sheet = "FLRFL.canals.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+```
+
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: all years
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.canals.area.by.state.
+```{r}
+flrfl.canal.area.by.state.all <- fl.cl.area.state.type %>%
+  filter(subtype == "canals and ditches",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(name, matches(paste0(1990:2022, collapse = "|"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(.))) %>%
+  rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
+  rename(state = name)
+
+  # Create a GT table of the data
+gt(flrfl.canal.area.by.state.all) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("canals and ditches by state, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 4, color = "blue") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = flrfl.canal.area.by.state.all,
+#                       sheet = "FLRFL.canals.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+```
+
+
+###Land Converted to Flooded Land
+####Emissions and Removals from Land Converted to Flooded Land - Reservoirs
+In 2022, the conterminous United States hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2022, na.rm = TRUE)) %>% pull()` hectares of reservoirs in the Flooded Land Remaining Flooded Land category.  These reservoirs are distributed across the `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` aggregated climate zones.
+
+#####FIGURE::  Climate zone and Flooded lands map
+```{r, results="hide"}
+
+# BREAK GEOGRAPHIES FOR INSETS AND PROJECT----------
+# Define LCFL in 2022
+lcfl.2022 <- fl.sf %>% # 
+  mutate(age = 2022 - year, # 2022 year
+         # lu in 2022
+         lu = case_when(age > 20 | is.na(age) ~ "Flooded Land Remaining Flooded Land", # keep NA
+                        TRUE ~ "Land Converted to Flooded Land")) %>% 
+  filter(type == "reservoir", # only reservoirs for this piece
+         lu == "Land Converted to Flooded Land") 
+nrow(lcfl.2022) # 185 rows
+
+# CONUS
+conus <- us.cz %>% # state + climate polygons.  plots with color = NA to hide border lines
+  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+conus.lines <- sb %>% # state border lines, no border lines for climate
+  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+conus.fl <- lcfl.2022 %>%  # flooded lands
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.cz %>%
+  filter(state_name == "Alaska")%>%
+  st_transform(3467)
+
+alaska.lines <- sb %>%
+  filter(state_name == "Alaska") %>%
+  st_transform(3467) %>%
+  st_cast("MULTILINESTRING")
+
+alaska.fl <- lcfl.2022 %>%
+  filter(name == "Alaska") %>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.cz %>%
+  filter(state_name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+hawaii.lines <- sb %>%
+  filter(state_name == "Hawaii") %>%
+  st_transform(crs = 32604) %>%
+  st_cast("MULTILINESTRING")
+
+hawaii.fl <- lcfl.2022 %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.cz %>%
+  filter(state_name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+pr.lines <- sb %>%
+  filter(state_name == "Puerto Rico") %>%
+  st_transform(crs = 32619) %>%
+  st_cast("MULTILINESTRING")
+
+pr.fl <- lcfl.2022 %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+# MAKE MAP MFMAP------------------
+
+## Create a theme
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+mf_export(x = conus,
+          filename = "output/figures/climateMapLCFL2022.png",
+          width = 1200, expandBB = c(.3,.3,0,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = unique(conus$color), # why isn't this working?!?!?!?!?!?!?!
+       leg_pos = NA)
+mf_map(x = conus.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(x = conus.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1.5)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = hawaii$color,
+       leg_pos = NA)
+mf_map(x = hawaii.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(hawaii.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.06, 0.2)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = pr$color,
+       leg_pos = NA)
+mf_map(x = pr.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(pr.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset?
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+# close the inset
+mf_inset_off()
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.01,.3,.06,0.42)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = alaska$color,
+       leg_pos = NA)
+mf_map(x = alaska.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(alaska.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset?
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1.5)
+
+mf_inset_off()
+
+# Add Map Title
+# mf_title("Climate Zones of the U.S.",cex = 2)
+
+# Add Credits
+# mf_credits(txt = paste0("Generated on: ",Sys.Date(),", Data Sources: IPCC, U.S. EPA"),
+#            pos = "bottomright", cex = 1)
+
+mf_inset_on(us, fig = c(0,0.3,0.45,0.9))
+
+# mf_legend(type = "typo", pos = "left",
+#           val = cz.colors$zone, pal = cz.colors$color,
+#           title = "Climate Zone",
+#           val_cex = 1.5, title_cex = 2)
+mf_inset_off()
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/climateMapLCFL2022.png")
+
+```
+
+
+#####TABLE::  GHG Emissions from Land Converted to Flooded Land—Reservoirs
+Total CH4 and CO2 emissions from reservoirs in LCFL are shown in the text in kt CH4, MMT CO2-eq, MMT CO2, and MMt C.  These tables are calculated in the "tables" tab of the spreadsheet.  Here I recreated the kt CH4 and MMT CO2 tables as a check against the Excel calculations.
+
+```{r}
+
+# CH4 table first
+# PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
+lcfl.ghg.national.subtype %>% 
+  filter(subtype == "reservoir", flux.type != "total", gas == "ch4") %>%
+  select(Activity, "1990", "2005", as.character(2018:2022)) %>%
+  mutate(across(where(is.numeric), round)) %>% 
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "GHG Emissions from Land Converted to Flooded Land—Reservoirs"), 
+    subtitle = md("kt CH4")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 5, color = "gray") 
+
+
+# CO2 table next
+# PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
+lcfl.ghg.national.subtype %>% 
+  filter(subtype == "reservoir", gas == "co2", units == "mmt") %>%
+  select(Activity, "1990", "2005", as.character(2018:2022)) %>%
+  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) %>% 
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "GHG Emissions from Land Converted to Flooded Land—Reservoirs"), 
+    subtitle = md("CO2")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 6, color = "cyan") 
+
+```
+
+
+#####TEXT
+Methane and CO2 emissions from reservoirs in Minnesota were 8-fold greater than from any other state (Figure 2, Table x-x).  This is attributed to `r  fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull()` reservoirs containing `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` ha of water, `r fl.e %>% pluck("2022") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` percent of which is Mille Lacs lake.  
+
+
+North Dakota is the second largest source of CO2 and CH4 from reservoirs and inundated areas in LCFL,  `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()`%  percent of LCFL-reservoir surface area in North Dakota is attributed to Devils Lake.
+
+#####FIGURE::  Aggregated reservoir emissions plotted by state.
+```{r, results="hide"}
+# 1.  CALCULATE TOTAL RESERVOIR CH4 AND CO2 BY STATE FOR 2022-------------
+lcfl.ghg.2022.reservoir <- fl.e$`2022` %>%
+  filter(lu == "Land Converted to Flooded Land",
+         type == "reservoir") %>%
+  dplyr::group_by(name) %>% 
+  summarize(ch4.total.tonnes.y = sum(ch4.total.tonnes.y, na.rm = T),
+            co2.tonnes.y = sum(co2.tonnes.y, na.rm = T))  %>% # sum by group
+  full_join(., st_crosswalk %>% select(name)) %>% # expand to include every state, even if area is NA (which means 0)
+  mutate(ch4.total.tonnes.y = replace(ch4.total.tonnes.y, is.na(ch4.total.tonnes.y), 0), # replace NA with 0
+         ch4.total.ktonnes.y = ch4.total.tonnes.y / 1000,
+         co2.tonnes.y = replace(co2.tonnes.y, is.na(co2.tonnes.y), 0), # replace NA with 0
+         co2.ktonnes.y = co2.tonnes.y / 1000) %>% 
+  arrange(name)
+
+
+# 2.  SET COLOR PALETTE FOR MAPS-----------
+# Creating palette function based onrColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+
+lcfl.ghg.2022.reservoir <- lcfl.ghg.2022.reservoir %>%
+  mutate(color.ch4 = pal.blues(scales::rescale(ch4.total.ktonnes.y)), # ch4 color, must rescale from 0-1
+         color.co2 = pal.blues(scales::rescale(co2.ktonnes.y))) # co2 color, must rescale from 0-1
+
+# add emissions and color data to object
+us.plot.lcfl.ghg.2022.reservoir <- merge(us, lcfl.ghg.2022.reservoir) 
+
+# preview colors
+us.plot.lcfl.ghg.2022.reservoir
+
+# 3.  ASSIGN CONUS, AK, HI, AND PR DATA TO SEPARATE OBJECTS-------
+# CONUS
+conus <- us.plot.lcfl.ghg.2022.reservoir %>% # state + CH4 + CO2
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.lcfl.ghg.2022.reservoir %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.lcfl.ghg.2022.reservoir %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.lcfl.ghg.2022.reservoir %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+
+# 4. MAKE CH4 MAP-------
+## Create a theme
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+mf_export(x = conus,
+          filename = "output/figures/LCFL.reservoir.2022.Tch4.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1))
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "name", type = "typo",
+       border = "black", # state borders
+       pal = conus$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = pr$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "ch4.total.ktonnes.y", type = "typo",
+       border = "black", # state border
+       pal = alaska$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+# Add legend
+mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, round(max(us.plot.lcfl.ghg.2022.reservoir$ch4.total.ktonnes.y), digits = 0), by = 1)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = expression(kt~CH[4]~y^-1),
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(A.~CH[4]~Emissions~from~Reservoirs), 
+         pos = "left",
+         bg = NA,
+         line = 2,
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/LCFL.reservoir.2022.Tch4.svg")
+
+```
+
+```{r, results="hide"}
+# 5. MAKE CO2 MAP-------
+
+mf_export(x = conus,
+          filename = "output/figures/LCFL.reservoir.2022.co2.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "name", type = "typo",
+       border = "black", # state borders
+       pal = conus$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "co2.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "co2.ktonnes.y", type = "typo",
+       border = "black", # state borders
+       pal = pr$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "co2.ktonnes.y", type = "typo",
+       border = "black", # state border
+       pal = alaska$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+# Add legend
+mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
+
+
+# val.legend <-  seq(0, 
+#                    round(max(us.plot.lcfl.ghg.2022.reservoir$co2.ktonnes.y), digits = -2), # round to nearest 100
+#                    by = 50)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = expression(kt~CO[2]~y^-1),
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+
+# Add Map Title
+mf_title(txt = expression(B.~CO[2]~Emissions~from~Reservoirs), 
+         pos = "left",
+         bg = NA,
+         line = 2,
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/LCFL.reservoir.2022.co2.svg")
+
+```
+
+
+
+#####TABLE:: LCFL-reservoirs CH4 and CO2 emissions by mechanism (dn, surface) and state
+This table is written to "inventoryReportTablesFormattedFromR.xlsx", worksheet == LCFL.res.ghg.by.state, formatted, then pasted as table 6-95 in the report.
+```{r}
+lcfl.res.ghg.by.state <- 
+  fl.e$`2022` %>%
+  select(name, subtype, type, lu,
+         ch4.surface.tonnes.y, ch4.dn.tonnes.y, co2.tonnes.y) %>% 
+  filter(type == "reservoir",
+         lu == "Land Converted to Flooded Land") %>%
+  select(-lu) %>%
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>% # expand to include every state, even if area is NA (which means 0)
+  # reservoir is only subtype in type == reservoir, so grouping by subtype not necessary.
+  # relict from 1990-2020 when we had the inundation subtype, but keeping here because it
+  # will be needed for OCWB table.
+  group_by(name, subtype) %>% 
+  summarize(ch4.surface.tonnes.y = sum(ch4.surface.tonnes.y), 
+            ch4.dn.tonnes.y = sum(ch4.dn.tonnes.y),
+            co2.tonnes.y = sum(co2.tonnes.y)) %>%
+  # pivot_wider(names_from = subtype, 
+  #             values_from = c(ch4.surface.tonnes.y, ch4.dn.tonnes.y, co2.tonnes.y),
+  #             values_fill = 0) %>% # replace NA with 0
+  # select(name, ch4.dn.tonnes.y_reservoir, ch4.surface.tonnes.y_reservoir,
+  #        `ch4.dn.tonnes.y_inundation area`, `ch4.surface.tonnes.y_inundation area`) %>%
+  select(-subtype) %>%
+  mutate(ch4.total.tonnes.y = ch4.dn.tonnes.y + ch4.surface.tonnes.y) %>%
+  mutate(across(where(is.numeric), ~.x/1000), # convert to kt
+         across(where(is.numeric), ~ case_when(is.na(.) ~ 0,
+                                               TRUE ~ .))) %>%
+  rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), 
+              .cols = contains("tonnes")) %>%
+  relocate(ch4.total.ktonnes.y, .before = co2.ktonnes.y)
+
+# Create a GT table of the data
+gt(lcfl.res.ghg.by.state %>% ungroup) %>%
+  tab_header(title = md(
+    "LCFL-reservoirs CH4 and CO2 emissions"), 
+    subtitle = md("by mechanism and state, kt, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  cols_label(
+    name = "state", 
+    ch4.surface.ktonnes.y = "surface CH4",
+    ch4.dn.ktonnes.y = "dn CH4", 
+    ch4.total.ktonnes.y = "total CH4", 
+    co2.ktonnes.y = "CO2") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 1, color = "pink") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.res.ghg.by.state,
+#                       sheet = "LCFL.res.ghg.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 6, 
+#                       startCol = 3)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+
+```
+
+
+
+#### Methodology
+##### Area estimates
+Flooded land age was determined from data in the NID when available (`r fl.e %>% pluck("2022") %>% filter(!is.na(year), type == "reservoir") %>% summarize(total.n = n()) %>% pull()` out of `r  fl.e %>% pluck("2022") %>% filter(type == "reservoir") %>% summarize(total.n = n()) %>% pull()`).   
+
+
+
+##### Surface area by state
+In 2022, Minnesota has the greatest expanse of reservoir surface area in Land Converted to Flooded Land, with `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota", comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(mnTotArea = sum(area_ha_original)) %>% pull()` composed  of 
+```{r}
+# Exploratory figure to look for any obvious patterns that should be discussed.
+fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, contains("area")) %>%
+  group_by(name) %>%
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>%
+  pivot_longer(cols = contains("area"), 
+               names_to = "year", 
+               names_transform = list(year = readr::parse_number),
+               values_to = "thousand.ha") %>%
+  ggplot(aes(year, thousand.ha)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~name)
+
+# Minnesota has a big Reservoir that came online in ~2015. (comid == 2360642,
+# 51783 Ha  
+
+```
+
+#####TABLE:: National Flooded Land Area for Reservoirs in LCFL
+This table appears only in text.  Manually type values into .docx table, or write to clipboard, then paste.
+```{r}
+fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Land Converted to Flooded Land") %>%
+  select(matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>%
+   gt() %>%
+  tab_header(title = md(
+    "National Flooded Land Area for Reservoirs in LCFL"), 
+    subtitle = md("subtitle?")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "gray") 
+  
+```
+
+#####FIGURE:: dams betwwen 1990 and 2022
+Plotting data from NID, not just those contained in Inventory.
+```{r}
+# just read in NID table, don't need spatial data
+# https://gis.stackexchange.com/questions/338674/reading-large-gpkg-file-in-r
+nid <- st_read("flooded_lands/inputData/nation.gpkg", 
+               query = "select yearCompleted from main.dams")
+
+
+# Lots of screwing around with .pgn, .tiff, ggsave, etc to get this to look good in .doc
+tiff("output/figures/newDams.tiff", res = 800, compression = "lzw", width = 4.77/1.8, height = 4.99/2, units = "in")
+
+nid %>%
+  mutate(yearCompleted = as.numeric(yearCompleted)) %>%
+  filter(yearCompleted >= 1990 & yearCompleted <= 2022) %>%
+  group_by(yearCompleted) %>%
+  summarize(n_year = n()) %>%
+  ungroup() %>%
+  ggplot(., aes(yearCompleted, n_year)) +
+  geom_point() +
+  geom_line(color = "steelblue") +
+  ylab("New dams") +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  xlim(1990, 2022)
+
+dev.off()
+
+```
+
+
+#####TABLE:: Flooded Land Area for LCFL Reservoirs by State: abbreviated time series
+This table is not calculated in Excel reporting file.  Write to inventoryReportTablesFormattedFromR.xlsx, "LCFL-res.area.by.state" tab, then paste into word table.
+```{r}
+
+lcfl.res.area.by.state <- 
+  fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>% #thousands of hectares
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
+  mutate(across(everything(), ~replace_na(.x, 0))) %>% # replace NA with 0
+  arrange(name) 
+
+# Create a GT table of the data
+gt(lcfl.res.area.by.state) %>%
+  tab_header(title = md(
+    "Flooded Land Area for LCFL Reservoirs by State"), 
+    subtitle = md("abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  # cols_label(
+  #  name = "state", 
+  #  ch4.surface.ktonnes.y = "surface CH4",
+  #  ch4.dn.ktonnes.y = "dn CH4", 
+  #  ch4.total.ktonnes.y = "total CH4", 
+  #  co2.ktonnes.y = "CO2") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "gray") 
+
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.res.area.by.state,
+#                       sheet = "LCFL-res.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+
+```
+
+#####TABLE:: Flooded Land Area for LCFL Reservoirs by State: full time series
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == lcfl.res.area.by.state.
+```{r}
+
+lcfl.res.area.by.state.all <- 
+  fl.cl.area.state.type %>%
+  filter(type == "reservoir",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, matches(paste0(1990:2022, collapse = "|"))) %>%
+  group_by(name) %>% 
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>% #thousands of hectares
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
+  mutate(across(everything(), ~replace_na(.x, 0))) %>% # replace NA with 0
+  arrange(name) %>%
+  rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
+  rename(state = name) 
+
+  # Create a GT table of the data
+  gt(lcfl.res.area.by.state.all) %>%
+  tab_header(title = md(
+    "Flooded Land Area for LCFL Reservoirs by State"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+      # cols_label(
+  #  name = "state", 
+  #  ch4.surface.ktonnes.y = "surface CH4",
+  #  ch4.dn.ktonnes.y = "dn CH4", 
+  #  ch4.total.ktonnes.y = "total CH4", 
+  #  co2.ktonnes.y = "CO2") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 3, color = "cyan") 
+
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.res.area.by.state.all,
+#                       sheet = "LCFL-res.area.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+
+```
+
+
+#####RECALCULATIONS
+I think this code was used to discuss how correcting the year created field for a few large reservoirs (see Flooded Land Age section) contributed to differences between the 1990-2020 and 1990-2022 estimates.  Not needed for 1990-2022 report, but may come back and put something else here.
+```{r}
+# Relict code from 1990-2021.  Object cited in code don't exist.  See text above and Flooded Land Age section.
+# tibble with globalid values
+# fixYear.globalid <- fixYear %>% filter(!is.na(globalid)) %>% select(-comid)
+# 
+# # tibble with comid values
+# fixYear.comid <- fixYear %>% filter(!is.na(comid)) %>% select(-globalid)
+# 
+# # Area removed
+# fl.df.column %>%
+#   filter(globalid %in% fixYear.globalid$globalid | comid %in% fixYear.comid$comid) %>%
+#   summarize(areaTot = sum(area_ha_new))
+# 
+# # CO2 and CH4 emissions no longer included in 1990:
+# fl.df.column %>%
+#   filter(globalid %in% fixYear.globalid$globalid | comid %in% fixYear.comid$comid) %>%
+#   select(subtype, climate, area_ha_new) %>%
+#   mutate(lu = "Land Converted to Flooded Land") %>%
+#   left_join(., ef) %>%
+#     # co2 emissions
+#   mutate(co2.tonnes.y = co2.tonnes.ha.y * area_ha_new, # multiply co2 column by area
+#          ch4.surface.tonnes.y = ch4.tonnes.ha.y * area_ha_new, # multiply ch4 column by area
+#          ch4.dn.tonnes.y = ch4.surface.tonnes.y * 0.09, # downstream calculated as 9% of surface emissions
+#          ch4.total.tonnes.y = ch4.dn.tonnes.y + ch4.surface.tonnes.y) %>%
+#   summarize(co2.tot.mmt.y = sum(co2.tonnes.y)/1000000,
+#             ch4.total.kt.y = sum(ch4.total.tonnes.y)/1000)
+```  
+
+#####TABLE
+Comparison of emission estimates in 1990-2021 vs 1990-2022 Inventory.  This table does not appear in any spreadsheet, only in text.  Manually type results into Word table. 
+
+```{r}
+# GHG total (MMT CO2 Eq) in 1990-2022 Inventory.  These values are contrasted with those from the 1990-2021 Inventory in the Table.  1990-2021 values are taken from tables 6-91 and 6-93 in the 1990-2021 Inventory.
+
+lcfl.ghg.national.subtype %>% 
+  filter((subtype == "reservoir" & (gas == "co2" & units == "mmt")) |
+           (subtype == "reservoir" & (gas == "ch4" & flux.type == "total"))) %>%
+  select(gas, units, "1990", "2005", as.character(2017:2021)) %>%
+  pivot_longer(!(gas:units), names_to = "year", values_to = "flux") %>%
+  mutate(flux = case_when(gas == "ch4" ~ (flux/1000) * 28,
+                          TRUE ~ flux)) %>%
+  select(-units) %>%
+  pivot_wider(names_from = year, values_from = flux) %>%
+  summarize(across(where(is.numeric), sum)) %>%
+  mutate(across(where(is.numeric), round, 1)) %>% 
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "GHG total (MMT CO2 Eq) in 1990-2022 Inventory"), 
+    subtitle = md("subtitle?")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 4, color = "red") 
+
+```
+
+#### Other Constructed Waterbodies (Freshwater Ponds, Saline Ponds, Canals and Ditches)
+Activity data on pond salinity is not uniformly available for the conterminous U.S. and all `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(tot.area = sum(area2022))` ha of ponds in the inventory are assumed to be freshwater.   
+
+
+Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. 
+
+
+##### Emissions and Removals from Land Converted to Flooded Land - Other Constructed Waterbodies
+###### TABLE:: National level CH4 flux table
+National level GHG flux tables in the text are pulled from 'tables' tab of Excel file.  Table reconstructed below as a check against Excel calcs.
+```{r}
+# LCFL-other constructed waterbodies total GHG emissions table National
+# CH4 table in ktonnes first.  PERFECT MATCH TO EXCLE TABLE YAY!!
+lcfl.ghg.national.subtype %>%
+  filter(subtype %in% c("canals and ditches", "freshwater pond"),
+         flux.type == "total",
+         gas == "ch4") %>%
+  select(subtype, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
+  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) %>%
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "National-level CH4 Flux"), 
+    subtitle = md("kt CH4, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 5, color = "gray") 
+
+# CO2 table.  PERFECT MATCH TO EXCEL TABLE YAY!!
+lcfl.ghg.national.subtype %>%
+  filter(subtype %in% c("canals and ditches", "freshwater pond"),
+         flux.type == "surface",
+         gas == "co2",
+         units == "mmt") %>%
+  select(subtype, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
+  mutate(across(where(is.numeric), ~ num(.x, digits = 2))) %>%
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "National-level CH4 Flux"), 
+    subtitle = md("kt CH4, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 6, color = "blue") 
+
+
+```
+
+###### TABLE:: State level GHG flux table
+State level GHG flux tables are not compiled in Excel.  Table written to inventoryReportTablesFormattedFromR.xlsx, sheet == LCFL-ocwb.ghg.by.state, formatted, then pasted into report table.
+```{r}
+# LCFL-other constructed waterbodies GHG total emissions table by state
+# Good practice to recalculate the "TOTAL" in the LCFL-ocwb.ghg.by.state sheet 
+# in Excel to ensure no computational errors here.  Also, check totals against
+# those calculated in 'tables' sheet of main reporting Excel file to ensure
+# consistency.
+
+# STEP 1: STATE BY STATE TABLE
+lcfl.ocwb.ghg.state.2022 <- fl.e$`2022` %>%
+  select(name, subtype, type, lu, 
+         lu, ch4.total.tonnes.y, co2.tonnes.y ) %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land") %>%
+  select(-lu) %>%
+  # freshwater pond is only subtype in LCFL - OCWB because we dont' have year
+  # completed data for any canals, thus we don't need to group by subytpe, but
+  # keeping grouping term here in case we add age data for canals at some point. 
+  group_by(name, subtype) %>% # group by state and subypte
+  summarize(ch4.total.tonnes.co2.eq.y = sum(ch4.total.tonnes.y) * 28,
+            co2.tonnes.y = sum(co2.tonnes.y, na.rm = TRUE)) %>%
+  pivot_wider(names_from = subtype, 
+              values_from = c(ch4.total.tonnes.co2.eq.y, co2.tonnes.y),
+              values_fill = 0) %>% # replace NA with 0
+  mutate(total = `ch4.total.tonnes.co2.eq.y_freshwater pond` + 
+           `co2.tonnes.y_freshwater pond`) %>%
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
+  arrange(name) %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0)))
+
+
+# STEP 2: NATIONAL TOTALS
+lcfl.ocwb.ghg.totals.2022 <- fl.e$`2022` %>%
+  select(name, subtype, type, lu, 
+         lu, ch4.total.tonnes.y, co2.tonnes.y) %>% 
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land")  %>%
+  select(-lu, -type, -name) %>%
+  group_by(subtype) %>%
+  summarize(ch4.total.tonnes.co2.eq.y = sum(ch4.total.tonnes.y) * 28,
+            co2.tonnes.y = sum(co2.tonnes.y)) %>%
+  pivot_wider(names_from = subtype, 
+              values_from = c(ch4.total.tonnes.co2.eq.y, co2.tonnes.y),
+              values_fill = 0) %>% # replace NA with 0
+  mutate(total = `ch4.total.tonnes.co2.eq.y_freshwater pond` + 
+           `co2.tonnes.y_freshwater pond`) %>%
+  mutate(name = "TOTAL") %>% # to match formatting in Word table
+  relocate(name)
+
+
+# STEP 3: MERGE STATE TABLE WITH TOTALS
+lcfl.ocwb.ghg.state <- rbind(lcfl.ocwb.ghg.state.2022, lcfl.ocwb.ghg.totals.2022) %>% 
+  # IPCC required formatting.  No values meet criteria, so not
+  # actually needed now.
+  mutate(across(where(is.numeric), ~ifelse(.x > 0 & .x < 0.05,
+                                           "+", 
+                                           .x))) 
+
+# Create a GT table of the data
+gt(lcfl.ocwb.ghg.state %>% ungroup) %>%
+  tab_header(title = md(
+    "State-level GHG Flux"), 
+    subtitle = md("freshwater ponds, all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+      cols_label(
+    name = "state", 
+    `ch4.total.tonnes.co2.eq.y_freshwater pond` = "CH4 (t CO2 equiv.)",
+    `co2.tonnes.y_freshwater pond` = "CO2 (t)") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 1, color = "green") 
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.ocwb.ghg.state,
+#                       sheet = "LCFL-ocwb.ghg.by.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 6, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+
+
+###### FIGURE:: Emissions by state
+```{r, results="hide"}
+
+# 1.  CALCULATE TOTAL OCWB CH4 AND CO2 BY STATE FOR 2022-------------
+# this calculation was performed above, but we need to remove the 
+# space from the column names.  Need to revisit this if future inventories
+# contain other OCWB subtypes in FLRFL.
+lcfl.ocwb.ghg.state.2022.plot <- lcfl.ocwb.ghg.state.2022 %>%
+  rename_with(~str_replace(., " ", "_"))
+
+
+
+# 2.  SET COLOR PALETTE FOR MAPS-----------
+# Creating palette function based onrColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+# should be able to calculate color code as below, but gives same color for each emission value???
+# lcfl.ocwb.ghg.state.2022.plot <- lcfl.ocwb.ghg.state.2022.plot %>%
+#   mutate(color.ch4 = pal.blues(scales::rescale(ch4.total.tonnes.co2.eq.y_freshwater_pond)), # ch4 color, must rescale from 0-1
+#          color.co2 = pal.blues(scales::rescale(co2.tonnes.y_freshwater_pond))) # co2 color, must rescale from 0-1
+
+# calculate color code for each emission values by gas
+color.ch4 = data.frame(color.ch4 =
+                         pal.blues(scales::rescale(lcfl.ocwb.ghg.state.2022.plot$ch4.total.tonnes.co2.eq.y_freshwater_pond)))
+color.co2 = data.frame(color.co2 =
+                         pal.blues(scales::rescale(lcfl.ocwb.ghg.state.2022.plot$co2.tonnes.y_freshwater_pond)))
+
+# add color codes to data object
+lcfl.ocwb.ghg.state.2022.plot <- bind_cols(lcfl.ocwb.ghg.state.2022.plot, color.ch4, color.co2)
+
+# preview colors
+lcfl.ocwb.ghg.state.2022.plot
+
+# add emissions and color data to object
+us.plot.lcfl.ocwb.ghg.state.2022 <- merge(us, lcfl.ocwb.ghg.state.2022.plot) 
+
+
+# 3.  ASSIGN CONUS, AK, HI, AND PR DATA TO SEPARATE OBJECTS-------
+# CONUS
+conus <- us.plot.lcfl.ocwb.ghg.state.2022 %>% # state + CH4 + CO2
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.lcfl.ocwb.ghg.state.2022 %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.lcfl.ocwb.ghg.state.2022 %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.lcfl.ocwb.ghg.state.2022 %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+
+
+# 4. MAKE CH4 MAP-------
+## Create a theme
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+
+mf_export(x = conus,
+          filename = "output/figures/LCFL.ocwb.2022.Tch4.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1))
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "name", type = "typo",
+       border = "black", # state borders
+       pal = conus$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "ch4.total.tonnes.co2.eq.y_freshwater_pond", type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "ch4.total.tonnes.co2.eq.y_freshwater_pond", type = "typo",
+       border = "black", # state borders
+       pal = pr$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "ch4.total.tonnes.co2.eq.y_freshwater_pond", type = "typo",
+       border = "black", # state border
+       pal = alaska$color.ch4, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+# Add legend
+mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
+
+# val.legend <-  seq(0, round(max(us.plot.lcfl.ocwb.ghg.state.2022$ch4.total.tonnes.co2.eq.y_freshwater_pond), digits = -2), by = 125)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# # mf_legend(type = "choro", pos = "left",
+# #           val = val.legend, 
+# #           pal = pal.blues(pal.legend), # range of palette
+# #           val_rnd = 0,
+# #           title = expression(tonnes~CO[2]~Eq.~y^-1),
+# #           val_cex = 1, title_cex = 1.1)
+mf_inset_off()
+
+# Add Map Title
+mf_title(txt = expression(A.~CH[4]~Emissions~from~Freshwater~Ponds), 
+         pos = "left",
+         bg = NA,
+         line = 2,
+         inner = TRUE,
+         cex = 1.25)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/LCFL.ocwb.2022.Tch4.svg")
+
+```
+
+```{r, results="hide"}
+# 5. MAKE CO2 MAP-------
+
+mf_export(x = conus,
+          filename = "output/figures/LCFL.ocwb.2022.co2.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, var = "name", type = "typo",
+       border = "black", # state borders
+       pal = conus$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, var = "co2.tonnes.y_freshwater_pond", type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "co2.tonnes.y_freshwater_pond", type = "typo",
+       border = "black", # state borders
+       pal = pr$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "co2.tonnes.y_freshwater_pond", type = "typo",
+       border = "black", # state border
+       pal = alaska$color.co2, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+# Add legend
+mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
+
+
+# val.legend <-  seq(0, 
+#                    round(max(us.plot.lcfl.ocwb.ghg.state.2022$co2.tonnes.y_freshwater_pond), digits = -2), # round to nearest 100
+#                    by = 125)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = expression(tonnes~CO[2]~y^-1),
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+
+# Add Map Title
+mf_title(txt = expression(B.~CO[2]~Emissions~from~Freshwater~Ponds), 
+         pos = "left",
+         bg = NA,
+         line = 2,
+         inner = TRUE,
+         cex = 1.1)
+
+dev.off()
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/LCFL.ocwb.2022.co2.svg")
+
+
+# 1990 - 2020 LEGACY CODE-------------
+# # add emissions data to object
+# us.plot.lcfl.total.ghg.2021.ocwb <- merge(us.plot, 
+#                                                 lcfl.ocwb.ghg.state) 
+# 
+# 
+# p1 <- ggplot(us.plot.lcfl.total.ghg.2021.ocwb) +
+#   geom_sf(aes(fill = `co2.tonnes.y_freshwater pond`)) +
+#   scale_fill_distiller(expression(tonnes~CO[2]~Eq.~y^-1), 
+#                        palette = "Blues", direction = 1) +
+#   coord_sf(datum = NA) + # this removes grid lines.
+#   ggtitle(expression(~A.~CO[2]~Emissions~from~Freshwater~Ponds)) +
+#   theme(panel.background = element_blank(),
+#         title = element_text(size = 8))
+# 
+# 
+# 
+# p2 <- ggplot(us.plot.lcfl.total.ghg.2021.ocwb) +
+#   geom_sf(aes(fill = `ch4.total.tonnes.co2.eq.y_freshwater pond`)) +
+#   scale_fill_distiller(expression(tonnes~CO[2]~Eq.~y^-1), 
+#                        palette = "Blues", direction = 1) +
+#   coord_sf(datum = NA) + # this removes grid lines.
+#   ggtitle(expression(B.~CH[4]~Emissions~from~Freshwater~Ponds)) +
+#   theme(panel.background = element_blank(),
+#         title = element_text(size = 8))
+# 
+# # having trouble with ggsave
+# tiff("output/figures/LCFL.ocwb.2021.ghg.tiff", res = 800, compression = "lzw", width = 4.77*2, height = 4.49*2, units = "in")
+# 
+# plot_grid(p1, p2, nrow=1, ncol=2)
+# 
+# dev.off()
+
+```
+
+
+#### Methodology
+
+##### Area
+For the year 2022, this inventory contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of canals and ditches in Flooded Land Remaining Flooded Land.
+Area of freshwater ponds decreased by `r (fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()) / fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` 95 percent Ha as lands matriculated out of the LCFL category.
+
+
+######TABLE:: National Flooded Land Area for Other Constructed Waterbodies
+Pasted directly into Word, not calculated in main Excel reporting file, not formatted in inventoryReportTablesFormattedFromR.slxs.
+```{r}
+fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land") %>%
+  select(subtype, matches(c("1990|2005|2017|2018|2019|2020|2021"))) %>%
+  group_by(subtype) %>%
+  summarize(across(contains("area"), sum, na.rm = TRUE)) %>%
+  arrange(subtype) %>%
+  # Create a GT table of the data
+  gt() %>%
+  tab_header(title = md(
+    "National Flooded Land Area for Other Constructed Waterbodies"), 
+    subtitle = md("subtitle?")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 2, color = "pink") 
+
+```
+
+
+######FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
+
+```{r, results="hide"}
+# 1.  construct other constructed waterbodies surface area table
+lcfl.ocwb.area <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, subtype, area2022) %>%
+  group_by(name, subtype) %>% # not differentiating by pond vs canals, table too long for report
+  summarize(across(contains("area"), ~sum(.))) %>%
+  pivot_wider(names_from = subtype, 
+              values_from = area2022,
+              values_fill = 0) %>%
+  rename(freshwater_pond = `freshwater pond`) %>%
+  full_join(., st_crosswalk %>% select(name)) %>%
+  arrange(name) %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0)))
+
+# 2. DEFINE COLORS FOR CHLOROPETH MAP--------
+# Creating palette function based onrColorBrewer "Blues".  This should allow us to extract
+# hexidecimal color when applied to continuous emission data
+# https://www.color-hex.com/color-palette/17597
+# https://stackoverflow.com/questions/60260193/r-getting-hex-colors-from-numeric-values-how-to-define-midpoint-in-gradient-s
+pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
+
+# calculate color code for each emission value by subtype.
+color.pond <- data.frame(color.pond = pal.blues(scales::rescale(lcfl.ocwb.area$freshwater_pond)))
+
+# should be able to calculate color code as below, but gives same color for each emission value???
+# lcfl.ocwb.area  <- lcfl.ocwb.area  %>%
+#   mutate(color = pal.blues(scales::rescale(freshwater_pond)))
+
+# add color codes to data object
+lcfl.ocwb.area <- bind_cols(lcfl.ocwb.area, color.pond)
+
+# add emissions and color data to object
+us.plot.lcfl.ocwb.area <- merge(us, lcfl.ocwb.area)
+
+# preview colors
+us.plot.lcfl.ocwb.area
+
+
+# 3. BREAK GEOGRAPHIES------------------------
+# CONUS
+conus <- us.plot.lcfl.ocwb.area %>% # state + CH4
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  st_transform(5070)
+
+# Alaska
+alaska <- us.plot.lcfl.ocwb.area %>%
+  filter(name == "Alaska")%>%
+  st_transform(3467)
+
+# Hawaii
+hawaii <- us.plot.lcfl.ocwb.area %>%
+  filter(name == "Hawaii")%>%
+  st_transform(crs = 32604)
+
+# Puerto Rico
+pr <- us.plot.lcfl.ocwb.area %>%
+  filter(name == "Puerto Rico") %>%
+  st_transform(crs = 32619)
+
+# 4. CREATE MAP THEME-----------------------
+mf_theme(
+  #bg = "#a19e9d", 
+  bg = NA,
+  fg = "#000000", 
+  mar = c(0,0,0,0), 
+  tab = FALSE, inner = TRUE, line = 3, pos = "center", 
+  cex = 2, font = 3)
+
+# 5. MAKE PONDS MAP---------------
+# trying .svg vector format here
+mf_export(x = conus,
+          filename = "output/figures/LCFL.ocwb.pond.2022.area.svg",
+          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+#mf_shadow(cs, add = TRUE,col = "grey50")
+
+# CONUS
+mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
+mf_map(conus, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = conus$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Scale Bar
+mf_scale(size = 500, pos = "bottomright", unit = "mi",
+         cex = 1)
+mf_inset_off()
+
+
+# Hawaii
+mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_map(hawaii, 
+       var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = hawaii$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+# Title inset
+mf_title("Hawaii", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Puerto Rico
+mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
+# display the target municipality
+mf_map(pr, var = "name", 
+       type = "typo",
+       border = "black", # state borders
+       pal = pr$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Puerto Rico", 
+         bg = NA,
+         pos = "left",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+# Scale Bar
+mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+# close the inset
+mf_inset_off()
+
+
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.02,0.38)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "name", 
+       type = "typo",
+       border = "black", # state border
+       pal = alaska$color.pond, # pallete used in 1990-2020
+       leg_pos = NA)
+
+# Title inset
+mf_title("Alaska", 
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+         cex = 1)
+
+mf_inset_off()
+
+
+# Add legend
+mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
+
+val.legend <-  seq(0, round(max(us.plot.lcfl.ocwb.area$freshwater_pond), -2), # round to nearest 100
+                   by = 25)
+# pal.legend <- scales::rescale(val.legend)
+# 
+# mf_legend(type = "choro", pos = "left",
+#           val = val.legend, 
+#           pal = pal.blues(pal.legend), # range of palette
+#           val_rnd = 0,
+#           title = "hectares",
+#           val_cex = 1, title_cex = 1.25)
+mf_inset_off()
+
+# # Add Map Title
+# mf_title(txt = expression(A.~Area~of~Freshwater~Ponds), 
+#          pos = "left",
+#          bg = NA,
+#          line = 2, # required to get full title to fit in plot space
+#          inner = TRUE,
+#          cex = 1.25)
+
+dev.off()
+
+
+```
+
+```{r}
+
+# Load figure and render in markdown
+knitr::include_graphics("output/figures/LCFL.ocwb.pond.2022.area.svg")
+
+
+# 1990 - 2020 LEGACY CODE-----------------
+# # add emissions data to object
+# us.plot.lcfl.area.2021.ocwb <- merge(us.plot, lcfl.ocwb.area) 
+# 
+# 
+# ggplot(us.plot.lcfl.area.2021.ocwb) +
+#   geom_sf(aes(fill = `freshwater pond`)) +
+#   scale_fill_distiller("hectares", 
+#                        labels=function(x) format(x, big.mark = ",", scientific = FALSE),
+#                        palette = "Blues", direction = 1) +
+#   coord_sf(datum = NA) + # this removes grid lines.
+#   ggtitle(expression(~Area~of~Freshwater~Ponds)) +
+#   theme(panel.background = element_blank(),
+#         title = element_text(size = 8))
+# 
+# ggsave("output/figures/LCFL.ocwb.2021.area.tiff")
+```
+
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: abbreviated time series
+Table written to inventoryReportTablesFormattedFromR.xlsx, sheet == LCFL.ocwb.area.state, formatted, then pasted into report table.
+```{r}
+
+lcfl.ocwb.area.state <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, type, matches(c("1990|2005|2018|2019|2020|2021|2022"))) %>%
+  group_by(name) %>% # 
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE))) %>%
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
+  arrange(name) %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0))) 
+
+  # Create a GT table of the data
+  gt(lcfl.ocwb.area.state) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies by State"), 
+    subtitle = md("abbreviated time series")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 3, color = "blue") 
+
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportTablesFormattedFromR.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.ocwb.area.state,
+#                       sheet = "LCFL.ocwb.area.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+```
+
+######TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: full time series
+This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == lcfl.ocwb.area.state.
+```{r}
+
+lcfl.ocwb.area.state.all <- fl.cl.area.state.type %>%
+  filter(type == "other constructed waterbodies",
+         lu == "Land Converted to Flooded Land") %>%
+  select(name, type, matches(paste0(1990:2022, collapse = "|"))) %>%
+  group_by(name) %>% # 
+  summarize(across(contains("area"), ~sum(., na.rm = TRUE))) %>%
+  full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
+  arrange(name) %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0))) %>%
+  rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
+  rename(state = name) 
+
+
+# Create a GT table of the data
+gt(lcfl.ocwb.area.state.all) %>%
+  tab_header(title = md(
+    "Flooded Land Area for Other Constructed Waterbodies by State"), 
+    subtitle = md("all years")) %>%
+  tab_footnote(footnote = "footnote?") %>%
+  fmt_number(decimals = 4) %>%
+  opt_stylize(style = 4, color = "green") 
+
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/inventoryReportFloodedLandArea.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = lcfl.ocwb.area.state.all,
+#                       sheet = "LCFL.ocwb.area.state",
+#                       rowNames = FALSE, colNames = TRUE,
+#                       startRow = 5, 
+#                       startCol = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+```
+
+
+# Uncertainty analysis
+
+<!-- ### Define distributions for EFs -->
+<!-- ```{r} -->
+<!-- # Read in raw data used to calculate Rd value used in methodology -->
+<!-- rd <- readxl::read_excel("inputData/ipccDegassingReview.xlsx", sheet = "summary") -->
+<!-- names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),  -->
+<!--                  replacement = ".", x = names(rd)) -->
+
+<!-- # Filter out observations from Maeck et al. 2013.  These contain some outliers -->
+<!-- # and are lock and dam systems, not reflective of most reservoir surfaces. -->
+<!-- rd.no.maeck <- filter(rd, !grepl(pattern = "Maeck", x = rd$citation)) -->
+
+<!-- # visualize distribution -->
+<!-- fitdistrplus::plotdist(rd.no.maeck$Rd) # appears somewhat log-normal -->
+<!-- fitdistrplus::descdist(rd.no.maeck$Rd, boot = 1000) # suggest beta, but this requires value 0-1 -->
+
+<!-- # Attempted to fit beta, lnorm, weibull, and gamma distributions, but all failed, -->
+<!-- # likely due to zeroes in data.  Add small positive number and retry -->
+<!-- rd <- rd.no.maeck %>% -->
+<!--   mutate(Rd = replace(Rd, Rd == 0, 0.00001)) -->
+<!-- descdist(rd$Rd, boot = 1000) # suggest beta -->
+<!-- fitdist(rd$Rd, "beta") # beta requires values 0-1 -->
+<!-- flnorm <- fitdist(rd$Rd, "lnorm") # this seems to work -->
+<!-- denscomp(flnorm) # bad fit -->
+<!-- qqcomp(flnorm) # bad fit -->
+<!-- cdfcomp(flnorm) # not bad -->
+<!-- ppcomp(flnorm) # not bad -->
+
+<!-- # Generate simulated data using fitted distribution and compare to original data -->
+<!-- simData <- rlnorm(100, meanlog = flnorm$estimate[[1]], sdlog = flnorm$estimate[[2]]) -->
+<!-- data <- data.frame(rd = c(rd$Rd, simData), source = c(rep("ipcc", length(rd$Rd)), rep("sim", 100))) -->
+<!-- # the fit looks OK.   -->
+<!-- ggplot(data, aes(x=rd, color = source)) + -->
+<!--   geom_histogram()  -->
+<!-- # but when used in uncertainty simulation generates much too large numbers. -->
+<!-- # how about triangle distribution as discussed in IPCC 2006 CH.3 -->
+<!-- triangle::rtriangle(n = 100, a = 0.05, b = 0.22, c = 0.09)# 2019, table 7.1 -->
+<!-- ## view the distribution -->
+<!-- tri <- rtriangle(n = 10000, a = 0.05, b = 0.22, c = 0.09) -->
+<!-- hist(tri, breaks=100, main="Triangle Distribution", xlab="x") -->
+<!-- # triangle distribution also generates far too large numbers in simulation -->
+
+<!-- # How about truncated log normal? -->
+<!-- EnvStats::rlnormTrunc(100,  -->
+<!--                       meanlog = flnorm[1]$estimate[[1]],  -->
+<!--                       sdlog = flnorm[1]$estimate[[2]],  -->
+<!--                       min = 0.05, max = 0.22) %>% summary() -->
+<!-- # still too big. -->
+<!-- # can I define a log-normal distribution that approximates what is reported in  -->
+<!-- # IPCC 2019 Table 7.10?  After trying all these variations, sim0.085 was the -->
+<!-- # only one that produced a confidence interval containing the mean. -->
+<!-- sim1.3 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.3)) -->
+<!-- sim1.4 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.4)) -->
+<!-- sim1.5 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.5)) -->
+<!-- sim1.6 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.6)) -->
+<!-- sim0.085 <- rlnorm(100, meanlog = log(0.085), sdlog = log(1.5)) -->
+<!-- summary(sim1.3);summary(sim1.4);summary(sim1.5);summary(sim1.6) -->
+<!-- summary(sim0.085) -->
+
+<!-- ``` -->
+
+<!-- ### Simulations -->
+
+<!-- ```{r} -->
+<!-- # Read in emission factors -->
+<!-- ef.error <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>% -->
+<!--   # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI -->
+<!--   # of total emissions to not include the mean.  Here I'm expanding the CI -->
+<!--   # of the EF to force symmetry around mean. -->
+<!--   # Calculating CH4 emission factor standard deviation from 95% CI and n reported in guidance. -->
+<!--   # This will allow parameter distribution to be defined using rnorm, the preferred IPCC method. -->
+<!--   # No N reported for CO2, so using uniform distribution. -->
+<!--   # https://stats.stackexchange.com/questions/30402/how-to-calculate-mean-and-standard-deviation-in-r-given-confidence-interval-and -->
+<!--   mutate(ch4.tonnes.ha.y.upr = replace(ch4.tonnes.ha.y.upr,  -->
+<!--                                        subtype == "freshwater pond", -->
+<!--                                        0.248), -->
+<!--          ch4.sd = ((ch4.tonnes.ha.y.upr - ch4.tonnes.ha.y)/sqrt(n.ch4)) * 1.96) -->
+
+<!-- # put 1990 and 2022 data into a list to utilize 1990 - 2020 code -->
+<!-- fl <- list("1990" = fl.e$`1990` %>%  -->
+<!--              select(type, subtype, climate, area_ha_new, lu, age) %>% -->
+<!--              mutate(calc_year = 1990), -->
+<!--            "2022" = fl.e$`2022` %>%  -->
+<!--              select(type, subtype, climate, area_ha_new, lu, age) %>% -->
+<!--              mutate(calc_year = 2022)) %>% -->
+<!--   map(., ~ filter(.x, age > 0 | is.na(age))) -->
+
+
+<!-- # record nrow of fl list prior to merge.  Should be identical after merge. -->
+<!-- n.row.prior <- lapply(fl[c("1990", "2022")], nrow) #6,532,206 and 6,535,552 -->
+
+<!-- # Merge emission factors with 1990 and 2022 area inventory. -->
+<!-- tic() # 4 minutes with merge, 1.7 seconds with left join! -->
+<!-- fl <- lapply(fl[c("1990", "2022")], function(x) {  # first and last year -->
+<!--   left_join(x, ef.error)}) -->
+<!-- toc() -->
+
+<!-- # Make sure no records were lost during merge -->
+<!-- # LOOKS GOOD -->
+<!-- unlist(n.row.prior) == unlist(lapply(fl, nrow)) -->
+
+<!-- # Calculate emissions i times and aggregate by subtype and type -->
+<!-- fl.error.sim.subtype <- list() -->
+<!-- fl.error.sim.type <- list() -->
+<!-- set.seed(3452) # make it reproducible -->
+
+<!-- tic() # map: 85 seconds for 10 simulations, 1000 = 142 minutes, 10,000 = 23 hours, much longer with future_map   -->
+<!-- for (i in 1:10000) { #  -->
+<!--   print(i) -->
+<!--   fl.error.sim.i <- map(fl, function(x) { x %>% -->
+<!--       mutate(co2.tonnes.ha.y = runif(nrow(x), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr), -->
+<!--              ch4.tonnes.ha.y = rnorm(nrow(x), mean = ch4.tonnes.ha.y, sd = ch4.sd), -->
+<!--              # using rlnorm for downstream, see above.  mean of 0.085 needed to get lower -->
+<!--              # confidence interval less than mean estimate.  true mean is 0.09 -->
+<!--              dn.ef = rlnorm(nrow(x), meanlog = log(0.085), sdlog = log(1.5)), -->
+<!--              area_ha_new = runif(nrow(x), #15% error in area -->
+<!--                                  min = area_ha_new - (area_ha_new*0.15),  -->
+<!--                                  max = area_ha_new + (area_ha_new*0.15)), -->
+<!--              co2.tonnes.y = area_ha_new * co2.tonnes.ha.y, -->
+<!--              ch4.surface.tonnes.y = area_ha_new * ch4.tonnes.ha.y, -->
+<!--              ch4.dn.tonnes.y = ifelse(type == "other constructed waterbodies", # no DN for 'other' -->
+<!--                                       0, -->
+<!--                                       ch4.surface.tonnes.y * dn.ef), -->
+<!--              ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y) -->
+<!--   }) -->
+
+
+<!--   # Aggregate by subtype -->
+<!--   fl.error.sim.subtype[[i]] <- map(fl.error.sim.i, function(x) { x %>% -->
+<!--       # Sum emissions for each iteration of simulation.  Only keep summed data.  This reduces memory demands. -->
+<!--       group_by(lu, subtype) %>% -->
+<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4 -->
+<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4 -->
+<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28, # total CH4 -->
+<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2 -->
+<!--                 year = unique(calc_year)) %>%  -->
+<!--       mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
+<!--   }) -->
+
+<!--   # Aggregate by type -->
+<!--   fl.error.sim.type[[i]] <- map(fl.error.sim.i, function(x) {x %>% -->
+<!--       mutate(type = case_when(subtype == "inundation area" ~ "reservoir", # combine for total row -->
+<!--                               subtype %in% c("canals and ditches", "freshwater pond") ~ "other constructed waterbodies", -->
+<!--                               TRUE ~ subtype)) %>% -->
+<!--       group_by(lu, type) %>% -->
+<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4 -->
+<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4 -->
+<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = T)/1000000)*28, # total CH4 -->
+<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2 -->
+<!--                 year = unique(calc_year)) %>% -->
+<!--       mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
+<!--   }) -->
+<!-- } -->
+<!-- toc() -->
+
+
+<!-- # Warning message: -->
+<!-- # Problem with `mutate()` column `co2.tonnes.ha.y`. -->
+<!-- # i `co2.tonnes.ha.y = runif(nrow(fl.error), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr)`. -->
+<!-- # i NAs produced -->
+<!-- # expected because ef.error contains NA values for co2.tonnes.ha.y.lwr and co2.tonnes.ha.y.upr -->
+
+<!-- # Each iteration of the loop above creates a list of two elements (one for each year).   -->
+<!-- # This list gets assigned to one element of fl.error.sim, thus fl.error.sim has lists -->
+<!-- # nested within a list.  flatten() unnests the lists -->
+<!-- length(fl.error.sim.subtype) # 10000 elements -->
+<!-- fl.error.sim.subtype <- flatten(fl.error.sim.subtype)  -->
+<!-- length(fl.error.sim.subtype) # 20000 elements -->
+
+<!-- length(fl.error.sim.type) # 10,000 elements -->
+<!-- fl.error.sim.type <- flatten(fl.error.sim.type)  -->
+<!-- length(fl.error.sim.type) # 20,000 elements -->
+
+
+<!-- ``` -->
+
+
+<!-- ### Table:: Uncertainty -->
+<!-- ```{r} -->
+
+
+<!-- # STEP 1: COLLAPSE LIST INTO DF -->
+<!-- # ch4.co2 uncertainty table by subtype.  ~8 minutes on memory intensive DMAP -->
+<!-- ch4.co2.uncertainty.table <-  fl.error.sim.subtype %>% # ch4.co2.uncertainty -->
+<!--   reduce(bind_rows) %>% # collapse all elements of list into single df. -->
+<!--   group_by(lu, subtype, year) %>% # group by subtype -->
+<!--   summarize(across(everything(), list(min = min, -->
+<!--                                       max = max))) %>% -->
+<!--   ungroup() %>% -->
+<!--   arrange(year, lu, subtype) -->
+
+<!-- # ch4.co2 uncertainty table by type (subtypes nested in types) -->
+<!-- tic() # 56 minutes with 10,000 iterations -->
+<!-- ch4.co2.uncertainty.table.total <- fl.error.sim.type %>% -->
+<!--   reduce(full_join) %>% # merge all elements of list into single df. could use bind rows -->
+<!--   group_by(lu, type, year) %>% # group by type -->
+<!--   summarize(across(everything(), list(min = min, -->
+<!--                                       max = max))) %>% -->
+<!--   ungroup() %>% -->
+<!--   arrange(year, lu, type) -->
+<!-- toc() -->
+
+<!-- # STEP 2:  CALCULATE MEAN EMISSIONS TO COMBINE WITH UNCERTAINTY ESTIMATES -->
+<!-- # Bring in mean flux estimates for 1990 and 2022.  Reported in `Table::FLRFL-reservoirs CH4 -->
+<!-- # emissions by mechanism (dn, surface), type (inundation, reservoir), and state' above, -->
+<!-- # but recalculated here to merge with uncertainty results. -->
+
+<!-- # List with emissions from 1990 and 2022.  Assume these are "mean" values -->
+<!-- fl.for.mean <- list("1990" = fl.e$`1990` %>%  -->
+<!--                       select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y")), -->
+
+<!--                     "2022" = fl.e$`2022` %>%  -->
+<!--                       select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y"))) %>% -->
+<!--   map(., ~ filter(.x, age > 0 | is.na(age))) -->
+
+
+<!-- # ch4.co2 mean fluxes by subtype -->
+<!-- ch4.co2.mean.table <- fl.for.mean %>%  # first and last year -->
+<!--   lapply(., function(x) { -->
+<!--     x %>% -->
+<!--       select(lu, subtype, ch4.surface.tonnes.y, ch4.dn.tonnes.y,  -->
+<!--              ch4.total.tonnes.y, co2.tonnes.y) %>% -->
+<!--       group_by(lu, subtype) %>% # subtype -->
+<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y, na.rm = TRUE)/1000000)*28,  -->
+<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, -->
+<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28, -->
+<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, -->
+<!--                 ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)  -->
+<!--   }) %>% -->
+<!--   purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element -->
+<!--   map_dfr(., bind_rows) %>% # collapse into DF -->
+<!--   ungroup() # to be safe -->
+
+
+
+
+<!-- # ch4.co2 mean fluxes total! -->
+<!-- ch4.co2.mean.table.total <- fl.for.mean %>%  # first and last year -->
+<!--   lapply(., function(x) { -->
+<!--     x %>% -->
+<!--       select(lu, type, ch4.surface.tonnes.y, ch4.dn.tonnes.y, -->
+<!--              ch4.total.tonnes.y, co2.tonnes.y) %>% -->
+<!--       group_by(lu, type) %>% # type -->
+<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y)/1000000)*28, -->
+<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y)/1000000)*28, -->
+<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y)/1000000)*28, -->
+<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y)/1000000, -->
+<!--                 ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
+<!--   }) %>% -->
+<!--   purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element -->
+<!--   map_dfr(., bind_rows) %>% # collapse into DF -->
+<!--   ungroup()  # to be safe -->
+
+
+<!-- # STEP 3: COMBINE MEAN AND UNCERTAINTY ESTIMATES -->
+<!-- bound.perc = function(x,y){((x - y)/y) *100} # function for required fields -->
+
+<!-- ch4.co2.uncertainty.mean.table <- merge(ch4.co2.uncertainty.table, ch4.co2.mean.table) %>% -->
+<!--   mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,  -->
+<!--                                            ch4.surface.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,  -->
+<!--                                            ch4.surface.mmt.co2.eq.y), -->
+<!--          upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,  -->
+<!--                                       ch4.dn.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,  -->
+<!--                                       ch4.dn.mmt.co2.eq.y), -->
+<!--          upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,  -->
+<!--                                          ch4.total.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,  -->
+<!--                                          ch4.total.mmt.co2.eq.y), -->
+<!--          upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,  -->
+<!--                                    co2.mmt.co2.eq.y), -->
+<!--          lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,  -->
+<!--                                    co2.mmt.co2.eq.y), -->
+<!--          upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max, -->
+<!--                                          ghg.total.mmt.co2.eq.y), -->
+<!--          lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min, -->
+<!--                                          ghg.total.mmt.co2.eq.y)) %>% -->
+<!--   relocate(lu, subtype, year, contains("surface"), contains("dn"), contains("total"))  -->
+
+
+<!-- ch4.co2.uncertainty.mean.table.total <- merge(ch4.co2.uncertainty.table.total, ch4.co2.mean.table.total) %>% -->
+<!--   mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,  -->
+<!--                                            ch4.surface.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,  -->
+<!--                                            ch4.surface.mmt.co2.eq.y), -->
+<!--          upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,  -->
+<!--                                       ch4.dn.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,  -->
+<!--                                       ch4.dn.mmt.co2.eq.y), -->
+<!--          upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,  -->
+<!--                                          ch4.total.mmt.co2.eq.y), -->
+<!--          lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,  -->
+<!--                                          ch4.total.mmt.co2.eq.y), -->
+<!--          upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,  -->
+<!--                                    co2.mmt.co2.eq.y), -->
+<!--          lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,  -->
+<!--                                    co2.mmt.co2.eq.y), -->
+<!--          upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max, -->
+<!--                                          ghg.total.mmt.co2.eq.y), -->
+<!--          lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min, -->
+<!--                                          ghg.total.mmt.co2.eq.y)) %>% -->
+<!--   relocate(lu, type, year, contains("surface"), contains("dn"), contains("total"))  -->
+
+
+<!-- ###FLRFL TABLE -->
+<!-- # STEP 4: REPORT FOR RESERVOIR TABLE -->
+<!-- # Reservoir part of table -->
+<!-- ch4.co2.uncertainty.mean.table %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% # also included in list element name -->
+<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
+<!--              subtype == "reservoir") %>% -->
+<!--       pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>% -->
+<!--       mutate(surf.dn.tot = ifelse(grepl("surface", flux.name), -->
+<!--                                   "surface", -->
+<!--                                   ifelse(grepl("dn", flux.name), -->
+<!--                                          "downstream", -->
+<!--                                          ifelse(grepl("tot", flux.name), -->
+<!--                                                 "total", -->
+<!--                                                 ifelse(grepl("co2", flux.name), #Co2 is total, no downstream -->
+<!--                                                        "total", -->
+<!--                                                        "oops")))), -->
+<!--              flux.name = gsub(c(".surface|.dn|.total"), "", flux.name)) %>%  -->
+<!--       pivot_wider(names_from = flux.name, values_from = flux) %>% -->
+<!--       select(-contains("ghg"), -starts_with("co2"), -lwr.perc.co2, -upr.perc.co2) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL -->
+<!--       filter(surf.dn.tot != "total") %>% -->
+<!--       arrange(desc(subtype)) -->
+<!--   }) -->
+
+<!-- #Total part of table -->
+<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% # also included in list element name -->
+<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
+<!--              type == "reservoir") %>% -->
+<!--       select(lu, type, contains("total")) %>% -->
+<!--       select(-contains("ghg")) -->
+<!--   }) -->
+
+
+
+<!-- # STEP 5: REPORT FOR OTHER CONSTRUCTED WATERBODIES TABLE -->
+<!-- # canals and ditches / freshwater pond rows -->
+<!-- ch4.co2.uncertainty.mean.table %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% # also included in list element name -->
+<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
+<!--              subtype %in% c("canals and ditches", "freshwater pond")) %>% -->
+<!--       select(subtype, contains("total")) %>% -->
+<!--       select(-contains("ghg")) -->
+<!--   }) -->
+
+<!-- # total row -->
+<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% # also included in list element name -->
+<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
+<!--              type == "other constructed waterbodies") %>% -->
+<!--       select(lu, type, contains("total")) %>% -->
+<!--       select(-contains("ghg")) -->
+<!--   }) -->
+
+<!-- ###LCFL TABLE -->
+<!-- # REPORT FOR RESERVOIR TABLE -->
+<!-- # first part of table, dissagregated values -->
+<!-- ch4.co2.uncertainty.mean.table %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% -->
+<!--       filter(lu == "Land Converted to Flooded Land", -->
+<!--              subtype == "reservoir") %>%  -->
+<!--       pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>%  -->
+<!--       filter(!grepl("ch4.total", flux.name)) %>% # not reporting CH4 from dn + surface -->
+<!--       # distinct(flux.name) %>% print(n=Inf) %>% -->
+<!--       mutate(surf.dn.tot = ifelse(grepl("surface", flux.name), -->
+<!--                                   "surface", -->
+<!--                                   ifelse(grepl("dn", flux.name), -->
+<!--                                          "downstream", -->
+<!--                                          ifelse(grepl("^co2", flux.name), #starts with co2 -->
+<!--                                                 "surface", -->
+<!--                                                 ifelse(grepl("ghg", flux.name), -->
+<!--                                                        "total", #CH4 + CO2 -->
+<!--                                                        #all CO2 are surface -->
+<!--                                                        ifelse(flux.name %in% c("upr.perc.co2", "lwr.perc.co2"),  -->
+<!--                                                               "surface", -->
+<!--                                                               "oops"))))), -->
+<!--              flux.name = gsub(c(".surface|.dn|.total"), "", flux.name))  %>% # simplify flux name   -->
+<!--       pivot_wider(names_from = flux.name, values_from = flux) %>% -->
+<!--       select(-contains("ghg")) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL -->
+<!--       filter(surf.dn.tot != "total") %>% -->
+<!--       arrange(desc(subtype)) -->
+<!--   }) -->
+
+<!-- # total part of table -->
+<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% -->
+<!--       filter(lu == "Land Converted to Flooded Land", -->
+<!--              type == "reservoir") %>% # in this object, reservoir == reservoir + inundation -->
+<!--       select(lu, type, contains("ghg")) -->
+<!--   }) -->
+
+<!-- # REPORT FOR OTHER CONSTRUCTED WATERBODIES -->
+<!-- # by gas -->
+<!-- ch4.co2.uncertainty.mean.table %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% -->
+<!--       filter(lu == "Land Converted to Flooded Land", -->
+<!--              subtype %in% c("freshwater pond", "canals and ditches")) %>% -->
+<!--       select(lu, subtype, contains("total"), starts_with("co2"), contains("perc")) %>% -->
+<!--       select(-contains("ghg")) %>% -->
+<!--       mutate(across(!contains("perc") & -lu & -subtype, ~ .x * 1000)) # convert to ktonnes!!!! -->
+<!--   }) -->
+
+<!-- # total part of table -->
+<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
+<!--   split(., .$year) %>% # split into list -->
+<!--   lapply(., function(x) { -->
+<!--     x %>%  -->
+<!--       select(-year) %>% -->
+<!--       filter(lu == "Land Converted to Flooded Land", -->
+<!--              type == "other constructed waterbodies") %>% -->
+<!--       select(lu, type, contains("ghg")) %>% -->
+<!--       mutate(across(!contains("perc") & -lu & -type, ~ .x * 1000)) # convert to ktonnes!!!! -->
+<!--   }) -->
+
+<!-- ``` -->
+
+<!-- ### Tables: A. Data -->
+<!-- Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.   -->
+<!-- ```{r} -->
+<!-- # 1990 first--------------- -->
+<!-- A.Data.1990.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "1990"] # subset all "1990" results from list -->
+
+<!-- names(A.Data.1990.l) <- 1:length(A.Data.1990.l) # rename each list element with element position.  Each position = 1 iteration -->
+
+<!-- # Add iteration number as a new column in each dataframe in list, collapse to df, format.... -->
+<!-- A.Data.1990 <- imap(A.Data.1990.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name -->
+<!--   bind_rows(.) %>% -->
+<!--   select(-year, -ghg.total.mmt.co2.eq.y) %>% -->
+<!--   relocate(iteration) %>% -->
+<!--   ungroup() -->
+
+<!-- # prepare data to write to Excel -->
+<!-- A.Data.1990.export <- A.Data.1990 %>% -->
+<!--   pivot_wider(names_from = c(lu, subtype),  -->
+<!--               values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y, -->
+<!--                               ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>% -->
+<!--   # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream) -->
+<!--   # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates" -->
+<!--   # Replace 0 with NE for these cases -->
+<!--   mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0 -->
+<!--                 ~replace(., . == 0, "NE"))) # replace the zeroes with NE -->
+
+<!-- # paste into excel for formatting, then paste into Word. -->
+<!-- file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx" -->
+<!-- wb <- wb_load(file) -->
+<!-- openxlsx2::write_data(wb, -->
+<!--                       x = A.Data.1990.export, -->
+<!--                       sheet = "A. Data (Base Year, 1990)", -->
+<!--                       rowNames = FALSE, colNames = TRUE, -->
+<!--                       startRow = 11,  -->
+<!--                       startCol = 2) -->
+<!-- openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel -->
+
+
+
+<!-- # 2022--------------- -->
+<!-- A.Data.2022.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "2022"] # subset all "2022" results from list -->
+
+<!-- names(A.Data.2022.l) <- 1:length(A.Data.2022.l) # rename each list element with element position.  Each position = 1 iteration -->
+
+<!-- # Add iteration number as a new column in each dataframe in list, collapse to df, format.... -->
+<!-- A.Data.2022 <- imap(A.Data.2022.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name -->
+<!--   bind_rows(.) %>% -->
+<!--   select(-year, -ghg.total.mmt.co2.eq.y) %>% -->
+<!--   relocate(iteration) %>% -->
+<!--   ungroup() -->
+
+<!-- # prepare data to write to excel -->
+<!-- A.Data.2022.export <- A.Data.2022 %>% -->
+<!--   pivot_wider(names_from = c(lu, subtype),  -->
+<!--               values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y, -->
+<!--                               ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>% -->
+<!--   # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream) -->
+<!--   # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates" -->
+<!--   # Replace 0 with NE for these cases -->
+<!--   mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0 -->
+<!--                 ~replace(., . == 0, "NE"))) # replace the zeroes with NE -->
+
+
+<!-- # paste into excel for formatting, then paste into Word. -->
+<!-- file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx" -->
+<!-- wb <- wb_load(file) -->
+<!-- openxlsx2::write_data(wb, -->
+<!--                       x = A.Data.1990.export, -->
+<!--                       sheet = "A. Data (Current Year)", -->
+<!--                       rowNames = FALSE, colNames = TRUE, -->
+<!--                       startRow = 11,  -->
+<!--                       startCol = 2) -->
+<!-- openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel -->
+
+
+<!-- ``` -->
+
