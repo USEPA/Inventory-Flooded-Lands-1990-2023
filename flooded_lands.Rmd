@@ -14,11 +14,11 @@ code_folding:  hide
 editor_options: 
   chunk_output_type: console
 ---
-  
-  ## Setup
-  
-  # Load libraries and print session info to facilitate reproducibility.  This was run on DMAP memory intensive 16xLarge (64 cpus, 512GB) instance.  
+
 ```{r setup, message=FALSE, include=FALSE}
+# Load libraries and print session info to facilitate reproducibility.  
+# This was run on DMAP memory intensive 16xLarge (64 cpus, 512GB) instance.
+
 
 knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
 
@@ -47,21 +47,20 @@ conflict_prefer("filter", "dplyr")
 # Print R session info
 print(sessionInfo())
 ```
+# PRIMARY CALCULATIONS--NOT INCLUDED IN REPORT {.hidden}
+## Flooded Lands Data Sources {.hidden}
 
-
-## Flooded Lands Data Sources
-Flooded Lands in the US are derived from the [U.S. Army Corps of Engineers National Inventory of Dams](https://nid.sec.usace.army.mil/ords/f?p=105:1::::::), Navigable Waterways dataset maintained by the Department of Homeland security, the [National Wetlands Inventory]()and the [National Hydrography Data (NHD)](https://www.usgs.gov/core-science-systems/ngp/national-hydrography) maintained by the USGS.  Several screening tools were used to discriminate natural water bodies from Flooded Lands in these data sets.
-
+Flooded Lands in the US are derived from the [U.S. Army Corps of Engineers National Inventory of Dams](https://nid.sec.usace.army.mil/ords/f?p=105:1::::::), Navigable Waterways dataset maintained by the Department of Homeland security, the [National Wetlands Inventory]() and the [National Hydrography Data (NHD)](https://www.usgs.gov/core-science-systems/ngp/national-hydrography) maintained by the USGS.  Several screening tools were used to discriminate natural water bodies from Flooded Lands in these data sets.
 
 Below we read in the layers created by Alex.  Layers are then combined into a single sf object.  A simple check shows that all rows were preserved in the merge.
 
-```{r, message=FALSE, warning=FALSE, results="hide"}
-
+```{r, flooded_lands_data_sources, message=FALSE, warning=FALSE, results="hide"}
 
 # ALL DATA
 # Alex Hall prepared the GIS data for the 1990-2022 inventory.  Data are
 # presented as four layers in 2023_Flooded_Lands_Final_102323.gdb
 st_layers("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb")
+st_layers("C:\\Users\\JBEAULIE\\OneDrive - Environmental Protection Agency (EPA)\\gitRepository\\inventory_1990_2022\\inputData\\2023_Flooded_Lands_Final_102323.gdb")
 # Data were shared via OneDrive as .zip file, downloaded to local clone of this 
 # RStudio project, uploaded to newftp.epa.gov, downloaded to mounted memory on
 # RStudio instance on DMAP using sftp (see "C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency
@@ -221,11 +220,13 @@ nrow(nwi) + nrow(nav) + nrow(canals) + nrow(nhd) # 6,535,897
 
 
 ```
-
-## Area Representation
-### Climate
+### Area Representation {.hidden}
+#### Climate {.hidden}
 These features have been intersected with a layer of US state and territory boundaries (from USABoundaries package: inputData/us_states.shp) and the IPCC climate aggregated climate layer.  IPCC emission factors are aggregated into six climate zones.  The original 12 IPCC climate zones were aggregated per Table 7A.2 in Lovelock et al. Flooded Lands Methodology.  See C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency (EPA)\Profile\Documents\Documents\research\IPCC\methodology2019\methodology2019.Rproj for details.
-```{r, message=FALSE, warning=FALSE, results="hide"}
+
+
+```{r, climate_map, message=FALSE, warning=FALSE, results="hide"}
+
 # SharePoint                          
 climate <- sf::st_read("flooded_lands/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
   select(fldd_zn) %>% # pull out Flooded Lands climate zone
@@ -236,15 +237,12 @@ climate <- sf::st_read("flooded_lands/inputData/climateMap", layer = "ipcc_zones
 st_crs(climate) # 4326, WGS84
 
 plot(climate)
-
-# rename climate field
-# fl.sf <- fl.sf %>% dplyr::rename(climate = fldd_zn)
 ```
+#### Areas and State Names {.hidden}
+All area calculations were performed in Goode Homolosine Land "ESRI:54052" projection.  All layers were projected to WGS84 after the area calculations. The area of the polygons prior to intersection with state and climate is in 'original_area_meters', but converted to 'area_ha_original' below. This area is used to determine if the polygon is a pond or reservoir. Area of the intersected polygons is in 'area_meters', but converted to 'area_ha_new' below.  State postal code is in 'stusps'.  Full state name is mutated into 'name' below.
+```{r, area_and_state, message=FALSE, warning=FALSE, results="hide"}
 
-### Areas and State Names
-All area calculations were performed in Goode Homolosine Land "ESRI:54052" projection.  All layers were projected to WGS84 after the area calculations.
-The area of the polygons prior to intersection with state and climate is in 'original_area_meters', but converted to 'area_ha_original' below. This area is used to determine if the polygon is a pond or reservoir. Area of the intersected polygons is in 'area_meters', but converted to 'area_ha_new' below.  State postal code is in 'stusps'.  Full state name is mutated into 'name' below.
-```{r, message=FALSE, warning=FALSE, results="hide"}
+
 # names(fl.sf)
 
 # fl.sf <- fl.sf %>%
@@ -279,7 +277,7 @@ st_crosswalk <- tibble(name = state.name) %>%  # state.name is base R
 # fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
 
 ```
-## Omit Guam and Virgin Islands
+#### Omit Guam and Virgin Islands {.hidden}
 Alex included Guam and Virgin Islands, but the Excel file isn't ready to accommodate them.  Omitting for now.
 ```{r}
 # fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
@@ -288,17 +286,17 @@ Alex included Guam and Virgin Islands, but the Excel file isn't ready to accommo
 ```
 
 
-## Preview Polygon
+#### Preview Polygon {.hidden}
 Navigation layer polygons were compared to NWI polygons and any overlap removed from navigation layer.  In many instances this converted the original navigation polygon into many smaller polygons, all sharing a common comid value.  Polygon were further divided by the intersection with climate and state polygon.  For example, COMID == 120049697 is a Mississippi River impoundment that was split into `r fl.sf %>% filter(comid == 120049697) %>% nrow()` individual polygons.  The cumulative area of the 131 polygons is equal to the area of the original polygon before intersecting with state and climate, but after removing NWI overlap areas:
+
 ```{r, message=FALSE, warning=FALSE, results="hide"}
 # area after removing NWI overlap, but before intersection with state and climate
 # fl.sf %>% st_drop_geometry() %>% filter(comid == 120049697) %>% distinct(area_ha_original)
 # fl.sf %>% st_drop_geometry() %>% filter(comid == 120049697) %>% summarize(area_total = sum(area_ha_new))
 ```
 
-## Flooded Land Age
+### Flooded Land Age {.hidden}
 NWI and NHD polygons were associated with National Inventory of Dams (NID) points.  NID contains a 'year' field indicating the year the dam was created.  Finally, while drafting report I noticed that lakes Oahe and Saskawea (large Missouri River impoundments) are missing year data.  Manually add those in below, but should check with Alex to see why they weren't included in his data.
-
 ```{r, message=FALSE, warning=FALSE, results="hide"}
 # PREVIEW YEAR DATA
 # fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # 65,093 features with year data
@@ -384,10 +382,9 @@ fixYear.comid <- fixYear %>% filter(!is.na(comid)) %>% select(-objectid)
 # fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # up to 61,215 because we added year to 377 features from NW comid 120049464.  Good!
 ```
 
-## Define Flooded Land Type and Subtype
+### Define Flooded Land Type and Subtype {.hidden}
 
 Per figure 7.2 in methodology, <8 ha is pond.  Canal/Ditch derived from FTYPE values.
-
 ```{r}
 # Define size threshold for ponds.
 # fl.sf <- fl.sf %>% mutate(subtype = case_when(area_ha_original < 8 ~ "freshwater pond",
@@ -422,9 +419,8 @@ Per figure 7.2 in methodology, <8 ha is pond.  Canal/Ditch derived from FTYPE va
 ```
 
 
-## Set Up Time Series Infrastructure
+### Set Up Time Series Infrastructure {.hidden}
 Emissions/removals must be calculated for each year in the time series.  Reservoir age is extracted from NID.  When age not available we assume > 20.
-
 ```{r, results="hide"}
 fl.df <- fl.sf %>% st_drop_geometry() # drop geometry to simplify things are reduce memory
 format(object.size(fl.df), units = "GB") # 1.1GB
@@ -486,27 +482,26 @@ table(fl[[29]]$lu)
 
 ```
 
-## Emisssion and Removal Emission Factors
+### Emisssion and Removal Emission Factors {.hidden}
 
 IPCC default emission factors are based on Flooded Land age, Flooded Land size, and climate zone.  Flooded Lands greater than 20 years old are considered "Flooded Lands Remaining Flooded Lands", whereas Flooded Lands less than 20 years old are classified as "Lands Converted to Flooded Lands".  
 
-### Land Converted to Flooded Land
-#### Reservoirs
+#### Land Converted to Flooded Land {.hidden}
+##### Reservoirs {.hidden}
 The CH~4~ emission factor is greater for Land Converted to Flooded Land than for Flooded Lands Remaining Flooded Lands.  CO~2~ emissions are also estimated for this land use category, but not for Flooded Lands Remaining Flooded Lands.  Emission factors are dissagregated by the six major climate zones.
 
-#### Other Constructed Waterbodies
+##### Other Constructed Waterbodies {.hidden}
 No emission factors are provided for 'Other Constructed Waterbodies' in this land-use category.  IPCC guidance says to use Flooded Land Remaining Flooded Land values for CH4.  IPCC guidance says to use use `Land Converted to Flooded Land - reservoirs` CO2 emission factors for freshwater pond CO2 emission factors, but provides no guidance for other constructed water bodies.
 
-### Flooded Land Remaining Flooded Land
-#### Reservoirs
+#### Flooded Land Remaining Flooded Land {.hidden}
+##### Reservoirs {.hidden}
 CO~2~ emissions are not estimated for Flooded Land Remaining Flooded Land.  CH~4~ emission factors are dissagregated by the six major climate zones present in the US.
 
-#### Other Constructed Waterbodies
+##### Other Constructed Waterbodies {.hidden}
 Flooded Lands less than 8 Ha are classified as freshwater ponds for this inventory and have a single emission factor.  Canals and ditches,  derived from NHD FTYPE and shape, have a singe emission factor.  No downstream emissions for this category.
 
-## Calculate emissions
-###All polygons
-
+## Calculate emissions {.hidden}
+### All polygons {.hidden}
 ```{r, results="hide"}
 # Read in emission factors
 ef <- readxl::read_excel("flooded_lands/inputData/defaultEmissionFactors.xlsx") %>%
@@ -552,7 +547,7 @@ toc()
 map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
 ```
 
-### Aggretate as needed
+### Aggretate as needed {.hidden}
 #### Set up a few things
 ```{r, results="hide"}
 # We want all states to have an area value for each type (res, pond, ditch), even
@@ -575,7 +570,7 @@ full.state.type.grid <- expand.grid(types, st_crosswalk_no_GU_VQ$name) %>%
   rename(type = Var1, name = Var2) 
 ```
 
-##### All Flooded Land Surface Area and EFs by state, climate, type, subtype, and lu
+##### All Flooded Land Surface Area and EFs by state, climate, type, subtype, and lu {.hidden}
 This is written out to state specific tabs in Excel file.  See 'Write to Excel' section.
 ```{r, results="hide"}
 # updated for 1990_2022
@@ -615,7 +610,7 @@ unique(fl.cl.area.state.type$type) # no FLY YOU FOOLS, so good!
 
 ```
 
-##### Flooded Land Remaining Flooded Land CH4 flux National Summary Table By subtype and Flux Type
+##### Flooded Land Remaining Flooded Land CH4 flux National Summary Table By subtype and Flux Type {.hidden}
 This table is written 7.3.1_FLRFL_summary tab of Excel document.  Does not appear in text.
 ```{r, results="hide"}
 # updated for 1990-2022
@@ -675,7 +670,7 @@ unique(flrfl.ch4.national.subtype$flux.type) # no "oops!", good
 ```
 
 
-##### Land Converted to Flooded Land GHG flux National Summary Table By subtype and Flux Type
+##### Land Converted to Flooded Land GHG flux National Summary Table By subtype and Flux Type {.hidden}
 This table is written to 7.3.2_LCFL_summary tab of Excel document  in "Write to Excel" section below.  Does not appear in text.
 ```{r, results="hide"}
 
@@ -751,7 +746,7 @@ unique(lcfl.ghg.national.subtype$flux.type) # no "oops!", good
 unique(lcfl.ghg.national.subtype$gas) # no "oops!", good
 unique(lcfl.ghg.national.subtype$units) # no "oops!", good
 ```
-### Write to Excel
+## Write to Excel {.hidden}
 ```{r, results="hide"}
 # Write data to Excel
 
@@ -857,17 +852,23 @@ openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
 ```
 
 
-# Text for report
-###Flooded Land Remaining Flooded Land
-#### Reservoirs: Emissions and Removals from Flooded Land Remaining Flooded Land
-In 2022 the conterminous United States hosted `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2022) %>% summarize(tot.area = sum(.)) %>% pull() / 1000000` million hectares of reservoirs in the Flooded Land Remaining Flooded Land category.  These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull()` six of the aggregated climate zones used to define flooded land emission factors.
-
-See "#####TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state" below for stats on relative emissions from Texas, Florida, and Louisiana.
-
-Methane emissions from reservoirs in Flooded Land Remaining Flooded Land increased `r flrfl.ch4.national.subtype %>% clean_names %>% filter(subtype == "reservoir", flux_type == "total") %>% mutate(percent.increase = ((x2022 - x1990)/x1990)*100) %>% select(percent.increase) %>% pull()` percent from 1990 to 2022 due to the matriculation of reservoirs in Land Converted to Flooded Land to Flooded Land Remaining Flooded Land.
 
 
-#####FIGURE: Climate zone and Flooded lands map
+# TEXT FOR REPORT {.hidden}
+# Flooded Land Remaining Flooded Land
+Flooded lands are defined as water bodies where human activities have 1) caused changes in the amount of surface area covered by water, typically through water level regulation (e.g., constructing a dam), 2) waterbodies where human activities have changed the hydrology of existing natural waterbodies thereby altering water residence times and/or sedimentation rates, in turn causing changes to the natural emission of greenhouse gases, and 3) waterbodies that have been created by excavation, such as canals, ditches and ponds (IPCC 2019). Flooded lands include waterbodies with seasonally variable degrees of inundation, but these waterbodies would be expected to retain some inundated area throughout the year under normal conditions.  
+
+Flooded lands are broadly classified as “reservoirs” or “other constructed waterbodies” (IPCC 2019). Other constructed waterbodies include canals/ditches and ponds (flooded land <8 ha surface area). Reservoirs are defined as flooded land greater than 8 ha. IPCC guidance (IPCC 2019) provides default emission factors for reservoirs, ponds, and canals/ditches. 
+
+Land that has been flooded for greater than 20 years is defined as flooded land remaining flooded land and land flooded for 20 years or less is defined as land converted to flooded land. The distinction is based on literature reports that CH4 and CO2 emissions are high immediately following flooding, but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005; Barros et al. 2011; Teodoru et al. 2012). Emissions of CH4 are estimated for flooded land remaining flooded land, but CO2 emissions are not included as they are 6-126   Inventory of U.S. Greenhouse Gas Emissions and Sinks: 1990–2022 primarily the result of decomposition of organic matter entering the waterbody from the catchment or contained in inundated soils and are captured in Chapter 6, Land Use, Land-Use Change, and Forestry.  
+
+Nitrous oxide emissions from flooded lands are largely related to input of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting of N2O emissions which are captured in other source categories, such as indirect N2O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge). 
+
+## Emissions from Flooded Land Remaining Flooded Land-Reservoirs
+Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In 2022, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2022) %>% summarize(tot.area = sum(.)) %>% pull() / 1000000` million hectares of reservoirs in the flooded land remaining flooded land category.  These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)(IPCC 2019).
+
+
+### FIGURE: Climate zone and Flooded lands map {.hidden}
 ```{r, results="hide"}
 # GGPLOT2 + TIGRIS GET US MOST OF THE WAY THERE, BUT AK, HI, AND PR
 # ARE NOT LABELED.  MAPSF DOES IT ALL, BUT MUCH MORE COMPLICATED
@@ -1148,15 +1149,17 @@ dev.off()
 ```
 
 ```{r}
-
 # Load figure and render in markdown
 knitr::include_graphics("output/figures/climateMapFLRFL.png")
 
 ```
 
+Methane is produced in reservoirs through the microbial breakdown of organic matter. Per unit area, CH4 emission rates tend to scale positively with temperature and system productivity (i.e., abundance of algae), but negatively with system size (i.e., depth, surface area). Methane produced in reservoirs can be emitted from the reservoir surface or exported from the reservoir when CH4-rich water passes through the dam. This exported CH4 can be released to the atmosphere as the water passes through hydropower turbines or the downstream river channel. Methane emitted to the atmosphere via this pathway is referred to as “downstream emissions.”  
+
+Table 6-80 and Table 6-81 below summarize nationally aggregated CH4 emissions from reservoirs. The increase in CH4 emissions through the time series is attributable to reservoirs matriculating from the land converted to flooded land category into the flooded land remaining flooded land category.  
 
 
-#####TABLE::  CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs
+### TABLE::  CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs {.hidden}
 Total CH4 emissions from reservoirs in FLRFL are shown in the text in both kt CH4 and MMT CH4-CO2-eq.  These tables are the top two tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Here I recreated the kt CH4 table as a check against the Excel calculations.
 
 ```{r}
@@ -1164,22 +1167,22 @@ Total CH4 emissions from reservoirs in FLRFL are shown in the text in both kt CH
 flrfl.ch4.national.subtype %>% 
   filter(subtype == "reservoir") %>%
   select(Activity, subtype, flux.type, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
-  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangemen
+  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangement
          across(where(is.numeric), round)) %>%
   arrange(flux.type) %>%
   # Create GT table of data
   gt() %>%
   tab_header(title = md(
-    "CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs"), 
-    subtitle = md("subtitle?")) %>%
-  tab_footnote(footnote = "footnote?") %>%
+    "Table 6-80: CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs (MMT CO2 Eq.)"), 
+    subtitle = md("subtitle?")) %>% # No subtitle needed
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") %>%
   opt_stylize(style = 1, color = "blue") 
   
   
 
 ```
 
-#####FIGURE::  Aggregated reservoir emissions plotted by state.
+### FIGURE::  Aggregated reservoir emissions plotted by state.
 ```{r, results="hide"}
 # Calculate total reservoir CH4 emissions by state for 2022
 flrfl.total.ch4.2022.reservoir <- fl.e$`2022` %>% 
@@ -1367,7 +1370,7 @@ knitr::include_graphics("output/figures/FLRFL.reservoir.2022.Tch4.png")
 
 ```
 
-#####TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state
+### TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state
 This table is written to "inventoryReportTablesFormattedFromR.xlsx", sheet = "FLRFL.res.ch4.by.stat", formatted, then pasted as table 6-75 in the report.
 Check the totals calculate by Excel against the top table in the tables tab of FloodedLands-Output_90-22_write_to_from_R.xlsx.
 ```{r}
@@ -1421,7 +1424,7 @@ flrfl.ch4.2022.reservoir.state %>%
 ```
 
 
-#### Methodology
+### Methodology
 ##### Area Estimates
 Reservoir age in FLRFL Flooded land age was determined from data in the NID when available (`r fl.e %>% pluck("2022") %>% filter(!is.na(year), type == "reservoir") %>% summarize(total.n = n()) %>% pull()` out of `r  fl.e %>% pluck("2022") %>% filter(type == "reservoir") %>% summarize(total.n = n()) %>% pull()`).  
 
@@ -1520,12 +1523,11 @@ flrfl.area.reservoir.state.all <-
 ##### Uncertainty
 Uncertainty calculations are performed at end of this .Rmd.  This section is a placeholder to provide consistency with text.
 
-#### Other Constructed Waterbodies: Emissions and Removals from Flooded Land Remaining Flooded Land
-
+## Emissions from Flooded Land Remaining Flooded Land-Other Constructed Waterbodies
 IMMEDIATELY ABOVE NATIONAL LEVEL CH4 FLUX TABLE
 Methane emissions from ponds increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull()) * 100` 0.65% from 1990-2022
 
-###### TABLE:: National level CH4 flux table
+### TABLE:: National level CH4 flux table
 Total CH4 emissions from OCWB in FLRFL are shown in the text in both kt CH4 and MMT CH4.  These tables are the 3rd and 4th  tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Here I recreated the kt CH4 table as a check against the Excel calculations.
 ```{r}
 # FLRFL-other constructed waterbodies ch4 total emissions table National
@@ -1549,7 +1551,7 @@ flrfl.ch4.national.subtype %>%
 
 
 
-###### TABLE:: State level CH4 flux table
+### TABLE:: State level CH4 flux table
 State level CH4 flux tables are not compiled in Excel.  Table written inventoryReportTablesFormattedFromR.xlsx where it is formatted, then pasted into report table.
 ```{r}
 # FLRFL-other constructed waterbodies ch4 total emissions table by state
@@ -1658,7 +1660,7 @@ flrfl.ch4.2022.ocwb.state %>%
 
 
 
-###### FIGURE: Emissions by state
+### FIGURE: Emissions by state
 
 ```{r, results="hide"}
 # 1.  CALCULATE TOTAL OCWB CH4 EMISSIONS BY SUBTYPE AND STATE FOR 2022------------------
@@ -1988,12 +1990,12 @@ knitr::include_graphics("output/figures/FLRFL.ocwb.pond.2022.Tch4.svg")
 ```
 
 
-#### Methodology
+### Methodology
 
 ##### Area
 For the year 2022, this inventory contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of canals and ditches in Flooded Land Remaining Flooded Land.  Area of freshwater ponds increased by `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` Ha as lands matriculated in from the LCFL category.
 
-######TABLE:: National Flooded Land Area for Other Constructed Waterbodies: abbreviated time series
+###### TABLE:: National Flooded Land Area for Other Constructed Waterbodies: abbreviated time series
 This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.ocwb.area.national` tab, then paste into .docx table.
 ```{r}
 flrfl.ocwb.area.national <- fl.cl.area.state.type %>%
@@ -2024,7 +2026,7 @@ flrfl.ocwb.area.national <- fl.cl.area.state.type %>%
 
 
 ```
-######TABLE:: National Flooded Land Area for Other Constructed Waterbodies: full time series
+###### TABLE:: National Flooded Land Area for Other Constructed Waterbodies: full time series
 This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.ocwb.area.national.
 ```{r}
 flrfl.ocwb.area.national.all <- fl.cl.area.state.type %>%
@@ -2062,7 +2064,7 @@ gt(flrfl.ocwb.area.national.all) %>%
 
 Canals and ditches in the conterminous U.S. are most abundant in the Gulf Coast states and California (Fig. x-xxA.). FLorida contains `r fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land", name == "Florida") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all US canals and ditches. Texas has the greatest surface area of freshwater ponds, equivalent to   `r fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land", name == "Texas") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all freshwater pond surface area in the United States, closely followed by Florida.
 
-######FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
+###### FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
 
 ```{r, results="hide"}
 # 1. Make other constructed waterbodies surface area table---------------
@@ -2390,7 +2392,7 @@ knitr::include_graphics("output/figures/FLRFL.ocwb.pond.2022.area.svg")
 
 ```
 
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: abbreviated time series
+###### TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: abbreviated time series
 This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.pond.area.by.state` tab, format, then paste into .docx table.
 Compare total row to FLRFL.ocwb.area.national
 ```{r}
@@ -2430,7 +2432,7 @@ gt(flrfl.pond.area.by.state) %>%
 
 ```
 
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: all years
+###### TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: all years
 This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.pond.area.by.state.
 ```{r}
 flrfl.pond.area.by.state.all <- fl.cl.area.state.type %>%
@@ -2463,7 +2465,7 @@ flrfl.pond.area.by.state.all <- fl.cl.area.state.type %>%
 # openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
 
 ```
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: abbreviated time series
+###### TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: abbreviated time series
 This table appears only in text.  It is not in main spreadsheet.  Calculate here, write to inventoryReportTablesFormattedFromR.xlsx, `FLRFL.canals.area.by.state` tab, format, then paste into .docx table.
 ```{r}
 flrfl.canal.area.by.state <- fl.cl.area.state.type %>%
@@ -2495,7 +2497,7 @@ gt(flrfl.canal.area.by.state) %>%
 
 ```
 
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: all years
+###### TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals and ditches by State: all years
 This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.canals.area.by.state.
 ```{r}
 flrfl.canal.area.by.state.all <- fl.cl.area.state.type %>%
@@ -2529,11 +2531,22 @@ gt(flrfl.canal.area.by.state.all) %>%
 ```
 
 
-###Land Converted to Flooded Land
-####Emissions and Removals from Land Converted to Flooded Land - Reservoirs
+
+# Land Converted to Flooded Land
+Flooded lands are defined as water bodies where human activities have 1) caused changes in the amount of surface area covered by water, typically through water level regulation (e.g., constructing a dam), 2) waterbodies where human activities have changed the hydrology of existing natural waterbodies thereby altering water residence times and/or sedimentation rates, in turn causing changes to the natural production of greenhouse gases, and 3) waterbodies that have been created by excavation, such as canals, ditches and ponds (IPCC 2019). Flooded lands include waterbodies with seasonally variable degrees of inundation but would be expected to retain some inundated area throughout the year under normal conditions.  
+
+Flooded lands are broadly classified as “reservoirs” or “other constructed waterbodies” (IPCC 2019). Reservoirs are defined as flooded land greater than 8 ha and includes the seasonally flooded land on the perimeter of permanently flooded land (i.e., inundation areas). IPCC guidance (IPCC 2019) provides default emission factors for reservoirs and several types of “other constructed waterbodies” including freshwater ponds and canals/ditches. 
+
+Land that has been flooded for 20 years or greater is defined as flooded land remaining flooded land and land flooded for less than 20 years is defined as land converted to flooded land. The distinction is based on literature reports that CO2 and CH4 emissions are high immediately following flooding as labile organic matter is rapidly degraded but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005, Barros et al. 2011, Teodoru et al. 2012). Both CO2 and CH4 emissions are estimated for land converted to flooded land.  
+
+Nitrous oxide emissions from flooded lands are largely related to inputs of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting N2O emissions which are captured in other source categories, such as indirect N2O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge). 
+
+Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. The permanently wetted portion of reservoirs are typically surrounded by periodically inundated land referred to as a “drawdown zone” or “inundation area.” Greenhouse gas emissions from inundation areas are considered significant and similar per unit area to the emissions from the water surface and are therefore included in the total reservoir surface area when estimating greenhouse gas emissions from flooded land. Lakes converted into reservoirs without substantial changes in water surface area or water residence times are not considered to be managed flooded land (see Area Estimates below) (IPCC 2019). In 2022, the United States and Puerto Rico contained 72,461 ha of reservoir surface area in land converted to flooded land (see Methodology and Time-Series Consistency below for calculation details) distributed across all six of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) (IPCC 2019). 
+
 In 2022, the conterminous United States hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2022, na.rm = TRUE)) %>% pull()` hectares of reservoirs in the Flooded Land Remaining Flooded Land category.  These reservoirs are distributed across the `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` aggregated climate zones.
 
-#####FIGURE::  Climate zone and Flooded lands map
+## Emissions from Land Converted to Flooded Land - Reservoirs
+### FIGURE::  Climate zone and Flooded lands map
 ```{r, results="hide"}
 
 # BREAK GEOGRAPHIES FOR INSETS AND PROJECT----------
@@ -2761,7 +2774,9 @@ knitr::include_graphics("output/figures/climateMapLCFL2022.png")
 ```
 
 
-#####TABLE::  GHG Emissions from Land Converted to Flooded Land—Reservoirs
+Methane and CO2 are produced in reservoirs through the natural breakdown of organic matter. Per unit area emission rates tend to scale positively with temperature and system productivity (i.e., abundance of algae). Greenhouse gases produced in reservoirs can be emitted directly from the water surface and inundation areas or as greenhouse gas-enriched water passes through the dam and the downstream river. Sufficient information exists to estimate downstream CH4 emissions using Tier 1 IPCC guidance (IPCC 2019), but no guidance is provided for downstream CO2 emissions. Table 6-101 and Table 6-102 below summarize nationally aggregated CH4 and CO2 emissions from reservoirs in land converted to flooded land. The decrease in CO2 and CH4 emissions through the time series is attributable to reservoirs matriculating from the land converted to flooded land category into the flooded land remaining flooded land category. Emissions have been stable since 2005, reflecting the low rate of new flooded land creation over the past 17 years.  
+
+### TABLE::  GHG Emissions from Land Converted to Flooded Land—Reservoirs
 Total CH4 and CO2 emissions from reservoirs in LCFL are shown in the text in kt CH4, MMT CO2-eq, MMT CO2, and MMt C.  These tables are calculated in the "tables" tab of the spreadsheet.  Here I recreated the kt CH4 and MMT CO2 tables as a check against the Excel calculations.
 
 ```{r}
@@ -2800,13 +2815,13 @@ lcfl.ghg.national.subtype %>%
 ```
 
 
-#####TEXT
+
 Methane and CO2 emissions from reservoirs in Minnesota were 8-fold greater than from any other state (Figure 2, Table x-x).  This is attributed to `r  fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull()` reservoirs containing `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` ha of water, `r fl.e %>% pluck("2022") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` percent of which is Mille Lacs lake.  
 
 
 North Dakota is the second largest source of CO2 and CH4 from reservoirs and inundated areas in LCFL,  `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()`%  percent of LCFL-reservoir surface area in North Dakota is attributed to Devils Lake.
 
-#####FIGURE::  Aggregated reservoir emissions plotted by state.
+### FIGURE::  Aggregated reservoir emissions plotted by state.
 ```{r, results="hide"}
 # 1.  CALCULATE TOTAL RESERVOIR CH4 AND CO2 BY STATE FOR 2022-------------
 lcfl.ghg.2022.reservoir <- fl.e$`2022` %>%
@@ -3118,7 +3133,7 @@ knitr::include_graphics("output/figures/LCFL.reservoir.2022.co2.svg")
 
 
 
-#####TABLE:: LCFL-reservoirs CH4 and CO2 emissions by mechanism (dn, surface) and state
+### TABLE:: LCFL-reservoirs CH4 and CO2 emissions by mechanism (dn, surface) and state
 This table is written to "inventoryReportTablesFormattedFromR.xlsx", worksheet == LCFL.res.ghg.by.state, formatted, then pasted as table 6-95 in the report.
 ```{r}
 lcfl.res.ghg.by.state <- 
@@ -3182,13 +3197,33 @@ gt(lcfl.res.ghg.by.state %>% ungroup) %>%
 
 
 
-#### Methodology
-##### Area estimates
+### Methodology
+#### Area estimates
+U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),84 the National Inventory of Dams (NID),85 the National Wetlands Inventory (NWI),86 and the Navigable Waterways (NW) network,87 and the EPA’s Safe Drinking Water Information System (SDWIS).88 The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI. 
+
+Waterbodies in the NHDWaterbody layer that were less than or equal to 20-years old, greater than or equal to 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered reservoirs in land converted to flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m). 
+
+EPA assumes that all features included in the NW are subject to water-level management to maintain minimum water depths required for navigation and are therefore managed flooded lands. NW features greater than 8 ha in surface area are defined as reservoirs. 
+
+NWI features were considered “managed” if they had a special modifier value indicating the presence of management activities (Figure 6-19). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see ‘Water Regime’ in Figure 6-19). NWI features that met these criteria, were greater than 8 ha in surface area, and were not a canal/ditch (see emissions from land converted to flooded land–other constructed waterbodies) were defined as reservoirs.  
+
+Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed.” The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control. 
+
+Surface areas for identified flooded lands were taken from NHD, NWI or the NW. If features from the NHD, NWI, or the NW datasets overlapped, duplicate areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies. 
+
+Reservoir age was determined by assuming they were created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the feature was greater than 20-years old throughout the time series. Only reservoirs less than or equal to 20-years old are included in land converted to flooded land.
+
+NEED TO INSERT NWI TABLE HERE
+
+IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.  
+
+Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau89) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the Inventory. 
+
+The surface area of reservoirs in land converted to flooded land decreased by nearly 90 percent from 1990 to 2022 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2022 (Figure 6-20). 
+
 Flooded land age was determined from data in the NID when available (`r fl.e %>% pluck("2022") %>% filter(!is.na(year), type == "reservoir") %>% summarize(total.n = n()) %>% pull()` out of `r  fl.e %>% pluck("2022") %>% filter(type == "reservoir") %>% summarize(total.n = n()) %>% pull()`).   
 
-
-
-##### Surface area by state
+#### Surface area by state
 In 2022, Minnesota has the greatest expanse of reservoir surface area in Land Converted to Flooded Land, with `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota", comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(mnTotArea = sum(area_ha_original)) %>% pull()` composed  of 
 ```{r}
 # Exploratory figure to look for any obvious patterns that should be discussed.
@@ -3212,7 +3247,7 @@ fl.cl.area.state.type %>%
 
 ```
 
-#####TABLE:: National Flooded Land Area for Reservoirs in LCFL
+#### TABLE:: National Flooded Land Area for Reservoirs in LCFL
 This table appears only in text.  Manually type values into .docx table, or write to clipboard, then paste.
 ```{r}
 fl.cl.area.state.type %>%
@@ -3230,7 +3265,7 @@ fl.cl.area.state.type %>%
   
 ```
 
-#####FIGURE:: dams betwwen 1990 and 2022
+#### FIGURE:: dams betwwen 1990 and 2022
 Plotting data from NID, not just those contained in Inventory.
 ```{r}
 # just read in NID table, don't need spatial data
@@ -3264,7 +3299,7 @@ dev.off()
 ```
 
 
-#####TABLE:: Flooded Land Area for LCFL Reservoirs by State: abbreviated time series
+#### TABLE:: Flooded Land Area for LCFL Reservoirs by State: abbreviated time series
 This table is not calculated in Excel reporting file.  Write to inventoryReportTablesFormattedFromR.xlsx, "LCFL-res.area.by.state" tab, then paste into word table.
 ```{r}
 
@@ -3310,7 +3345,7 @@ gt(lcfl.res.area.by.state) %>%
 
 ```
 
-#####TABLE:: Flooded Land Area for LCFL Reservoirs by State: full time series
+#### TABLE:: Flooded Land Area for LCFL Reservoirs by State: full time series
 This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == lcfl.res.area.by.state.
 ```{r}
 
@@ -3359,7 +3394,9 @@ lcfl.res.area.by.state.all <-
 ```
 
 
-#####RECALCULATIONS
+### Uncertainty
+### QA/QC and Verification
+### Recalculations Discussion
 I think this code was used to discuss how correcting the year created field for a few large reservoirs (see Flooded Land Age section) contributed to differences between the 1990-2020 and 1990-2022 estimates.  Not needed for 1990-2022 report, but may come back and put something else here.
 ```{r}
 # Relict code from 1990-2021.  Object cited in code don't exist.  See text above and Flooded Land Age section.
@@ -3389,8 +3426,8 @@ I think this code was used to discuss how correcting the year created field for 
 #             ch4.total.kt.y = sum(ch4.total.tonnes.y)/1000)
 ```  
 
-#####TABLE
-Comparison of emission estimates in 1990-2021 vs 1990-2022 Inventory.  This table does not appear in any spreadsheet, only in text.  Manually type results into Word table. 
+#### TABLE
+Comparison of emission estimates in 1990-2021 vs 1990-2022 Inventory.  This table does not appear in any spreadsheet, only in text.  Manually type results into report paragraph.
 
 ```{r}
 # GHG total (MMT CO2 Eq) in 1990-2022 Inventory.  These values are contrasted with those from the 1990-2021 Inventory in the Table.  1990-2021 values are taken from tables 6-91 and 6-93 in the 1990-2021 Inventory.
@@ -3417,15 +3454,16 @@ lcfl.ghg.national.subtype %>%
 
 ```
 
-#### Other Constructed Waterbodies (Freshwater Ponds, Saline Ponds, Canals and Ditches)
-Activity data on pond salinity is not uniformly available for the conterminous U.S. and all `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(tot.area = sum(area2022))` ha of ponds in the inventory are assumed to be freshwater.   
 
 
-Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. 
+## Emissions from Land Converted to Flooded Land–Other Constructed Waterbodies
+Freshwater ponds are the only type of flooded lands within the “other constructed waterbodies” subcategory of land converted to flooded land that are included in this Inventory (see Methodology for details) because age data are not available for canals and ditches. All canals and ditches are assumed to be greater than 20-years old throughout the time series and are included in flooded land remaining flooded land.  
 
+IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” The IPCC “Decision tree for types of Flooded Land” (IPCC 2019, Fig. 7.2) elaborates on this description by defining waterbodies less than 8 ha as a subset of “other constructed waterbodies.” For this Inventory, ponds are defined as managed flooded land not identified as “canal/ditch” (see Methods below) with surface area less than 8 ha. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH4 emission rates than the latter. Activity data on pond salinity is not uniformly available for the United States and all ponds in land converted to flooded land are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are sites of substantial CH4 and CO2 emissions from anaerobic sediments.  
 
-##### Emissions and Removals from Land Converted to Flooded Land - Other Constructed Waterbodies
-###### TABLE:: National level CH4 flux table
+Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In 2022, states in the Great Plains region generally had the greatest CO2 and CH4 emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the second greatest emissions of all states, partly due to the relatively high CO2 emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).  
+
+### TABLE:: National level CH4 flux table
 National level GHG flux tables in the text are pulled from 'tables' tab of Excel file.  Table reconstructed below as a check against Excel calcs.
 ```{r}
 # LCFL-other constructed waterbodies total GHG emissions table National
@@ -3465,7 +3503,7 @@ lcfl.ghg.national.subtype %>%
 
 ```
 
-###### TABLE:: State level GHG flux table
+### TABLE:: State level GHG flux table
 State level GHG flux tables are not compiled in Excel.  Table written to inventoryReportTablesFormattedFromR.xlsx, sheet == LCFL-ocwb.ghg.by.state, formatted, then pasted into report table.
 ```{r}
 # LCFL-other constructed waterbodies GHG total emissions table by state
@@ -3552,7 +3590,7 @@ gt(lcfl.ocwb.ghg.state %>% ungroup) %>%
 ```
 
 
-###### FIGURE:: Emissions by state
+### FIGURE:: Emissions by state
 ```{r, results="hide"}
 
 # 1.  CALCULATE TOTAL OCWB CH4 AND CO2 BY STATE FOR 2022-------------
@@ -3902,14 +3940,31 @@ knitr::include_graphics("output/figures/LCFL.ocwb.2022.co2.svg")
 ```
 
 
-#### Methodology
+### Methodology and Time-Series Consistency
+Estimates of CH4 and CO2 emissions for other constructed waterbodies in land converted to flooded land follow the Tier 1 methodology in IPCC (2019). All calculations are performed at the state level and summed to obtain national estimates. Greenhouse gas emissions from the surface of these flooded lands are calculated as the product of flooded land surface area and an emission factor (Table 6-115). Due to a lack of empirical data on CO2 emissions from recently created ponds, IPCC (2019) states “For all types of ponds created by damming, the methodology described above to estimate CO2 emissions from land converted to reservoirs may be used.” This Inventory uses IPCC default CO2 emission factors for land converted to reservoirs when estimating CO2 emissions from land converted to freshwater ponds. IPCC guidance also states that “there is insufficient information available to derive separate CH4 emission factors for recently constructed ponds…” and allows for the use of IPCC default CH4 emission factors for land remaining flooded land. Downstream emissions are not inventoried for other constructed waterbodies because 1) many of these systems are not associated with dams (e.g., excavated ponds and ditches), and 2) there are insufficient data to derive downstream emission factors for other constructed waterbodies that are associated with dams (IPCC 2019). 
 
-##### Area
-For the year 2022, this inventory contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of canals and ditches in Flooded Land Remaining Flooded Land.
-Area of freshwater ponds decreased by `r (fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()) / fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` 95 percent Ha as lands matriculated out of the LCFL category.
+INSERT DEFAULT EMISSION FACTOR TABLE
+#### Area Estimates
+Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),92 the National Inventory of Dams (NID),93 the National Wetlands Inventory (NWI),94 and the Navigable Waterways (NW) network95, and the EPA’s Safe Drinking Water Information System (SDWIS)96. The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. 
+
+Waterbodies in the NHDWaterbody layer that were less than or equal to 20-years old, less than 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered freshwater ponds in land converted to flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m). 
+
+EPA assumes that all features included in the NW are subject to water-level management to maintain minimum water depths required for navigation and are therefore managed flooded lands. NW features that were less than 8 ha in surface area and not identified as canals/ditch (see below) were considered freshwater ponds. Only 2.1 percent of NW features met these criteria, and they were primarily associated with larger navigable waterways, such as lock chambers on impounded rivers.  
+
+NWI features were considered “managed” if they had a special modifier value indicating the presence of management activities (Figure 6-19). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see ‘Water Regime’ in Figure 6-19). NWI features that met these criteria, were less than 8 ha in surface area, and were not a canal/ditch were defined as freshwater ponds. 
+
+Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed”. The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control. 
+
+Surface areas for other constructed waterbodies were taken from NHD, NWI or the NW. If features from the NHD, NWI, or the NW datasets overlapped, duplicate areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies. 
+
+The age of other constructed waterbody features was determined by assuming the waterbody was created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series. No canal/ditch features were associated with a nearby dam, therefore all canal/ditch features were assumed to be greater than 20-years old through the time series.  
 
 
-######TABLE:: National Flooded Land Area for Other Constructed Waterbodies
+Activity data on pond salinity is not uniformly available for the conterminous U.S. and all `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(tot.area = sum(area2022))` ha of ponds in the inventory are assumed to be freshwater. 
+
+For the year 2022, this inventory contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of canals and ditches in Flooded Land Remaining Flooded Land. The area of freshwater ponds decreased by `r (fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()) / fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` percent from 1990 to 2022 due to flooded lands aging out of land converted to flooded land more quickly than new flooded lands entered the category. The greatest reduction in freshwater pond surface area occurred in Iowa, Kansas, and Georgia (Table 6-117). Freshwater ponds in the 2021 inventory are most abundant in Nebraska, Montana, and Kansas (Figure 6-22). 
+
+##### TABLE:: National Flooded Land Area for Other Constructed Waterbodies
 Pasted directly into Word, not calculated in main Excel reporting file, not formatted in inventoryReportTablesFormattedFromR.slxs.
 ```{r}
 fl.cl.area.state.type %>%
@@ -3931,7 +3986,7 @@ fl.cl.area.state.type %>%
 ```
 
 
-######FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
+##### FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State
 
 ```{r, results="hide"}
 # 1.  construct other constructed waterbodies surface area table
@@ -4148,7 +4203,7 @@ knitr::include_graphics("output/figures/LCFL.ocwb.pond.2022.area.svg")
 # ggsave("output/figures/LCFL.ocwb.2021.area.tiff")
 ```
 
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: abbreviated time series
+##### TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: abbreviated time series
 Table written to inventoryReportTablesFormattedFromR.xlsx, sheet == LCFL.ocwb.area.state, formatted, then pasted into report table.
 ```{r}
 
@@ -4185,7 +4240,7 @@ lcfl.ocwb.area.state <- fl.cl.area.state.type %>%
 
 ```
 
-######TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: full time series
+##### TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: full time series
 This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == lcfl.ocwb.area.state.
 ```{r}
 
@@ -4226,6 +4281,11 @@ gt(lcfl.ocwb.area.state.all) %>%
 ```
 
 
+### Uncertainty
+Uncertainty in estimates of CO2 and CH4 emissions from land converted to flooded land–other constructed water bodies include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in emission factors is provided in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in the NHD, NWI, NID, and NW are unknown, but uncertainty for remote sensing products is ±10 to 15 percent (IPCC 2003). EPA assumes an uncertainty of ± 15 percent for the flooded land area inventory based on expert judgment. These uncertainties do not include the underestimate of pond surface area discussed above. 
+### QA/QC and Verification
+### Recalculations Discussion
+### Planned Improvements
 # Uncertainty analysis
 
 <!-- ### Define distributions for EFs -->
