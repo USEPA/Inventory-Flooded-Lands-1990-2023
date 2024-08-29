@@ -24,7 +24,8 @@ knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
 
 library(tidyverse)
 library(sf)
-library(USAboundaries) # state map
+#library(USAboundaries) # state map, not available for 4.4
+library(USA.state.boundaries) # state map
 library(tigris) # shift_geometry for AK, HI, and PR
 library(mapsf) # For mapping AK, HI, and PR
 library(openxlsx2)
@@ -52,6 +53,12 @@ print(sessionInfo())
 
 Flooded Lands in the US are derived from the [U.S. Army Corps of Engineers National Inventory of Dams](https://nid.sec.usace.army.mil/ords/f?p=105:1::::::), Navigable Waterways dataset maintained by the Department of Homeland security, the [National Wetlands Inventory]() and the [National Hydrography Data (NHD)](https://www.usgs.gov/core-science-systems/ngp/national-hydrography) maintained by the USGS.  Several screening tools were used to discriminate natural water bodies from Flooded Lands in these data sets.
 
+Load this file and skip to `Set Up Time Series Infrastructure` (line 418) or run all code below.
+```{r, flooded_lands_data_processed, message=FALSE, warning=FALSE, results="hide"}
+#fl.sf <- st_read("output/2023_Flooded_Lands_Inventory_Final_121923.gpkg")
+```
+
+
 Below we read in the layers created by Alex.  Layers are then combined into a single sf object.  A simple check shows that all rows were preserved in the merge.
 
 ```{r, flooded_lands_data_sources, message=FALSE, warning=FALSE, results="hide"}
@@ -59,8 +66,7 @@ Below we read in the layers created by Alex.  Layers are then combined into a si
 # ALL DATA
 # Alex Hall prepared the GIS data for the 1990-2022 inventory.  Data are
 # presented as four layers in 2023_Flooded_Lands_Final_102323.gdb
-st_layers("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb")
-st_layers("C:\\Users\\JBEAULIE\\OneDrive - Environmental Protection Agency (EPA)\\gitRepository\\inventory_1990_2022\\inputData\\2023_Flooded_Lands_Final_102323.gdb")
+st_layers("~/shared/jbeaulie/inputData/2023_Flooded_Lands_Final_102323.gdb")
 # Data were shared via OneDrive as .zip file, downloaded to local clone of this 
 # RStudio project, uploaded to newftp.epa.gov, downloaded to mounted memory on
 # RStudio instance on DMAP using sftp (see "C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency
@@ -70,47 +76,45 @@ st_layers("C:\\Users\\JBEAULIE\\OneDrive - Environmental Protection Agency (EPA)
 # These data have been intersected with a layer of US state and territory boundaries
 # (from USABoundaries package: inputData/us_states.shp) and the IPCC climate aggregated
 # climate layer ("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
-# select(fldd_zn) %>% # pull out Flooded Lands climate zone
-# rename(climate = fldd_zn)).  All area calculations were performed in Goode Homolosine Land
+# select(fldd_zn)  # pull out Flooded Lands climate zone
+# All area calculations were performed in Goode Homolosine Land
 # "ESRI:54052" projection.  All layers projected to WGS84.
 
 # RESERVOIRS AND PONDS FROM NWI-----------------------
-# nwi <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb", 
-#                    layer = "NWI_Final_2023", 
-#                    fid_column_name = "OBJECTID") %>%
-#   janitor::clean_names() %>%
-#   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
-#   rename(area_meters = intersect_area_meters,
-#          stusps = state_abr,
-#          year = nid_year_completed)
-# 
-# table(st_geometry_type(nwi)) # all MULTIPOLYGON
-# # make_valid may not be necessary, and in fact mess with mapping later on.
-# # res <- st_make_valid(res) # correct any issues with invalid geometry
-# st_crs(nwi) # 4326, WGS84
-# nrow(nwi) # 6,225,698
-# 
-# # Do all polygons have original area, new area, state and climate? YES!
-# nwi %>% st_drop_geometry() %>% # expedite calcs
-#   summarize(original.area.na = sum(is.na(original_area_meters)),
-#             new.area.an = sum(is.na(area_meters)),
-#             climate.na = sum(is.na(fldd_zn)),
-#             state.na = sum(is.na(stusps))) 
-# 
-# # how many have dam construction year?
-# nwi %>% st_drop_geometry() %>% # expedite calcs
-#   summarize(dam.n = sum(!is.na(year))) #54,498!
+nwi <- sf::st_read("~/shared/jbeaulie/inputData/2023_Flooded_Lands_Final_102323.gdb",
+                   layer = "NWI_Final_2023",
+                   fid_column_name = "OBJECTID") %>%
+  janitor::clean_names() %>%
+  st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
+  rename(area_meters = intersect_area_meters,
+         stusps = state_abr,
+         year = nid_year_completed,
+         climate = fldd_zn)
 
-tic()
-nwi <- readRDS(file = "nwi.rds")
-toc()
+table(st_geometry_type(nwi)) # all MULTIPOLYGON
+# make_valid may not be necessary, and in fact mess with mapping later on.
+# res <- st_make_valid(res) # correct any issues with invalid geometry
+st_crs(nwi) # 4326, WGS84
+nrow(nwi) # 6,225,698
+
+# Do all polygons have original area, new area, state and climate? YES!
+nwi %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(original_area_meters)),
+            new.area.an = sum(is.na(area_meters)),
+            climate.na = sum(is.na(climate)),
+            state.na = sum(is.na(stusps)))
+
+# how many have dam construction year?
+nwi %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) #54,498!
 
 # NAVIGABLE WATERWAYS-------------------------------
-nav <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb/2023_Flooded_Lands_Final_102323.gdb", 
+nav <- sf::st_read("~/shared/jbeaulie/inputData/2023_Flooded_Lands_Final_102323.gdb", 
                    layer = "Navigable_Waterways_2023") %>%
   janitor::clean_names() %>%
   st_sf() %>% # # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
-  rename(original_area_meters = original_area_m)
+  rename(original_area_meters = original_area_m,
+         climate = fldd_zn)
 table(st_geometry_type(nav)) # all MULTIPOLYGON
 # make_valid may not be necessary, and in fact mess with mapping later on.
 # nav <- st_make_valid(nav) # correct any issues with invalid geometry
@@ -121,17 +125,18 @@ nrow(nav) # 31,899
 nav %>% st_drop_geometry() %>% # expedite calcs
   summarize(original.area.na = sum(is.na(original_area_meters)),
             new.area.an = sum(is.na(area_meters)),
-            climate.na = sum(is.na(fldd_zn)),
+            climate.na = sum(is.na(climate)),
             state.na = sum(is.na(stusps)))
 
 # CANALS AND DITCHES
-canals <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb//2023_Flooded_Lands_Final_102323.gdb", 
+canals <- sf::st_read("~/shared/jbeaulie/inputData/2023_Flooded_Lands_Final_102323.gdb", 
                       layer = "Ditches_Final_2023") %>%
   janitor::clean_names() %>%
   mutate(ftype = "CanalDitch", # code below uses this key to identify canals/ditches
          year = as.numeric(year)) %>%
   #st_sf() %>% # # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
-  rename(original_area_meters = original_area_m)
+  rename(original_area_meters = original_area_m,
+         climate = fldd_zn)
 table(st_geometry_type(canals)) # all MULTIPOLYGON
 # make_valid may not be necessary, and in fact mess with mapping later on.
 # canals <- st_make_valid(canals) # correct any issues with invalid geometry
@@ -142,7 +147,7 @@ nrow(canals) # 267,715
 canals %>% st_drop_geometry() %>% # expedite calcs
   summarize(original.area.na = sum(is.na(original_area_meters)),
             new.area.an = sum(is.na(area_meters)),
-            climate.na = sum(is.na(fldd_zn)),
+            climate.na = sum(is.na(climate)),
             state.na = sum(is.na(stusps)))
 
 # how many have dam construction year?
@@ -158,13 +163,14 @@ canals <- canals %>%
 #  MORE RESERVOIRS AND PONDS
 # These are NHD features that align with a NID dam or drinking water intake, 
 # but were not captured in the NWI data.
-nhd <- sf::st_read("flooded_lands/2023_Flooded_Lands_Final_102323.gdb//2023_Flooded_Lands_Final_102323.gdb",
+nhd <- sf::st_read("~/shared/jbeaulie/inputData/2023_Flooded_Lands_Final_102323.gdb",
                    layer = "NHD_Final_2023") %>%
   janitor::clean_names() %>%
   st_sf() %>% # rename doesn't work after clean_names, st_sf fixes whatever janitor broke
   rename(area_meters = intersect_area_meters,
          stusps = state_abr,
-         year = year_completed)
+         year = year_completed,
+         climate = fldd_zn)
 table(st_geometry_type(nhd)) # all MULTIPOLYGON
 # make_valid may not be necessary, and in fact mess with mapping later on.
 # nhd <- st_make_valid(nhd) # correct any issues with invalid geometry
@@ -177,7 +183,7 @@ nrow(nhd) # 10,595
 nhd %>% st_drop_geometry() %>% # expedite calcs
   summarize(original.area.na = sum(is.na(original_area_meters)),
             new.area.an = sum(is.na(area_meters)),
-            climate.na = sum(is.na(fldd_zn)),
+            climate.na = sum(is.na(climate)),
             state.na = sum(is.na(stusps)))
 
 # how many have dam construction year?
@@ -189,33 +195,33 @@ nhd %>% st_drop_geometry() %>% # expedite calcs
 nrow(nwi) + nrow(nav) + nrow(canals) + nrow(nhd) # 6,535,897
 
 # combine spatial data object
-# fl.sf <- dplyr::bind_rows(nwi, nav, canals, nhd) # ~ 1 minute
-# table(st_geometry_type(fl.sf)) # all MULTIPOLYGON
-# nrow(fl.sf) # 6,535,897
-# st_crs(fl.sf) # 4326, WGS84
-# 
-# # Do all polygons have original area, new area, state and climate? YES!
-# fl.sf %>% st_drop_geometry() %>% # expedite calcs
-#   summarize(original.area.na = sum(is.na(original_area_meters)),
-#             new.area.an = sum(is.na(area_meters)),
-#             climate.na = sum(is.na(fldd_zn)),
-#             state.na = sum(is.na(stusps)))
-# 
-# # how many have dam construction year?
-# fl.sf %>% st_drop_geometry() %>% # expedite calcs
-#   summarize(dam.n = sum(!is.na(year))) #65,093 (after removing year from canals layer)
-# 
-# # select only needed columns
-# names(fl.sf) 
-# fl.sf <- fl.sf %>% select(area_meters, original_area_meters,
-#                           contains("nid"),
-#                           stusps, fldd_zn, 
-#                           ftype, fcode,
-#                           year,
-#                           wetland_type,
-#                           comid, globalid, objectid)
-# 
-# format(utils::object.size(fl.sf), units = "GB") #8.1 GB
+fl.sf <- dplyr::bind_rows(nwi, nav, canals, nhd) # ~ 1 minute
+table(st_geometry_type(fl.sf)) # all MULTIPOLYGON
+nrow(fl.sf) # 6,535,897
+st_crs(fl.sf) # 4326, WGS84
+
+# Do all polygons have original area, new area, state and climate? YES!
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(original.area.na = sum(is.na(original_area_meters)),
+            new.area.an = sum(is.na(area_meters)),
+            climate.na = sum(is.na(climate)),
+            state.na = sum(is.na(stusps)))
+
+# how many have dam construction year?
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) #65,093 (after removing year from canals layer)
+
+# select only needed columns
+names(fl.sf)
+fl.sf <- fl.sf %>% select(area_meters, original_area_meters,
+                          contains("nid"),
+                          stusps, climate,
+                          ftype, fcode,
+                          year,
+                          wetland_type,
+                          comid, globalid, objectid)
+
+format(utils::object.size(fl.sf), units = "GB") #8.1 GB
 
 
 
@@ -228,12 +234,12 @@ These features have been intersected with a layer of US state and territory boun
 ```{r, climate_map, message=FALSE, warning=FALSE, results="hide"}
 
 # SharePoint                          
-climate <- sf::st_read("flooded_lands/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
+climate <- sf::st_read("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
   select(fldd_zn) %>% # pull out Flooded Lands climate zone
   rename(climate = fldd_zn) # rename
 
-# climate <- st_cast(climate, "MULTIPOLYGON")
-# climate <- st_make_valid(climate) # correct any issues with invalid geometry
+climate <- st_cast(climate, "MULTIPOLYGON")
+climate <- st_make_valid(climate) # correct any issues with invalid geometry
 st_crs(climate) # 4326, WGS84
 
 plot(climate)
@@ -243,18 +249,11 @@ All area calculations were performed in Goode Homolosine Land "ESRI:54052" proje
 ```{r, area_and_state, message=FALSE, warning=FALSE, results="hide"}
 
 
-# names(fl.sf)
+names(fl.sf)
 
-# fl.sf <- fl.sf %>%
-#   mutate(area_ha_original = original_area_meters / 10000,
-#          area_ha_new = area_meters / 10000)
-
-# ALL CODE TO DEFINE f.sf has been commented out above this line
-# the following loads the subsampled fl.sf object
-tic()
-fl.sf <- st_read("output/2023_Flooded_Lands_Inventory_subset.gpkg")
-toc() # 516 seconds
-
+fl.sf <- fl.sf %>%
+ mutate(area_ha_original = original_area_meters / 10000,
+        area_ha_new = area_meters / 10000)
 
 # Do all polygons have original and new area in ha? YES!
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
@@ -268,21 +267,21 @@ st_crosswalk <- tibble(name = state.name) %>%  # state.name is base R
                             "Guam and CNMI", "US Virgin Islands"),  # add DC and PR
                    stusps = c("DC", "PR", "GU", "VQ")))
 
-# # Add full state name.  ~1.5 minutes
-# fl.sf <- fl.sf %>% 
-#   left_join(., st_crosswalk, by = "stusps") # left_join will bring in name column
-# table(fl.sf$name, useNA = "ifany") # no NA's, good!
-# 
-# # Remove unnecessary columns
-# fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
+# Add full state name.  ~1.5 minutes
+fl.sf <- fl.sf %>%
+  left_join(., st_crosswalk, by = "stusps") # left_join will bring in name column
+table(fl.sf$name, useNA = "ifany") # no NA's, good!
+
+# Remove unnecessary columns
+fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
 
 ```
 #### Omit Guam and Virgin Islands {.hidden}
 Alex included Guam and Virgin Islands, but the Excel file isn't ready to accommodate them.  Omitting for now.
 ```{r}
-# fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
-# table(fl.sf$stusps) # no GU or VQ, good
-# nrow(fl.sf) # 6,535,897 down to 6,535,554
+fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
+table(fl.sf$stusps) # no GU or VQ, good
+nrow(fl.sf) # 6,535,897 down to 6,535,554
 ```
 
 
@@ -299,21 +298,21 @@ Navigation layer polygons were compared to NWI polygons and any overlap removed 
 NWI and NHD polygons were associated with National Inventory of Dams (NID) points.  NID contains a 'year' field indicating the year the dam was created.  Finally, while drafting report I noticed that lakes Oahe and Saskawea (large Missouri River impoundments) are missing year data.  Manually add those in below, but should check with Alex to see why they weren't included in his data.
 ```{r, message=FALSE, warning=FALSE, results="hide"}
 # PREVIEW YEAR DATA
-# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # 65,093 features with year data
-# table(fl.sf$year, useNA = "ifany") # zeroes and 9999. need to investigate
-# 
-# # Why year == 0?  These are NA, converted to zero during Alex's data processing
-# fl.sf %>% st_drop_geometry() %>% filter(year == 0) # see email to Alex on 10/27/2023
-# # convert year == 0 to NA
-# fl.sf <- fl.sf %>% mutate(year = replace(year, year == 0, NA)) 
-# 
-# # why year == 9999
-# fl.sf %>% st_drop_geometry() %>% filter(year == 9999) # nwi objectid = 418836 and 488920.  NID reports 9999 for associated dams.
-# # change these to NA
-# fl.sf <- fl.sf %>% mutate(year = replace(year, year == 9999, NA)) 
-# 
-# table(fl.sf$year) # zeroes and 9999 are gone, good
-# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # dropped to 60,838 features with year data
+fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # 65,093 features with year data
+table(fl.sf$year, useNA = "ifany") # zeroes and 9999. need to investigate
+
+# Why year == 0?  These are NA, converted to zero during Alex's data processing
+fl.sf %>% st_drop_geometry() %>% filter(year == 0) # see email to Alex on 10/27/2023
+# convert year == 0 to NA
+fl.sf <- fl.sf %>% mutate(year = replace(year, year == 0, NA))
+
+# why year == 9999
+fl.sf %>% st_drop_geometry() %>% filter(year == 9999) # nwi objectid = 418836 and 488920.  NID reports 9999 for associated dams.
+# change these to NA
+fl.sf <- fl.sf %>% mutate(year = replace(year, year == 9999, NA))
+
+table(fl.sf$year) # zeroes and 9999 are gone, good
+fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # dropped to 60,838 features with year data
 
 # FIX OTHERS WITH INCORRECT YEAR----------------------
 # I inspected most of the large reservoirs that transitioned from LCFL to FLRFL
@@ -359,27 +358,27 @@ fixYear.objectid <- fixYear %>% filter(!is.na(objectid)) %>% select(-comid)
 fixYear.comid <- fixYear %>% filter(!is.na(comid)) %>% select(-objectid)
 
 
-# # Join fixYear.objectid with fl.sf
-# nrow(fl.sf) # 6,535,554
-# tic() # 1 minute on memory intensive DMAP
-# fl.sf <- full_join(fl.sf, fixYear.objectid, by = "objectid")
-# toc()
-# nrow(fl.sf) # 6,535,554, same as before join, so good!
-# names(fl.sf) # but we have year.x and year.y.  Gotta merge these.
+# Join fixYear.objectid with fl.sf
+nrow(fl.sf) # 6,535,554
+tic() # 1 minute on memory intensive DMAP
+fl.sf <- full_join(fl.sf, fixYear.objectid, by = "objectid")
+toc()
+nrow(fl.sf) # 6,535,554, same as before join, so good!
+names(fl.sf) # but we have year.x and year.y.  Gotta merge these.
 
 # year.y values are from fixYear.  Keep year.y
 # Merge year columns, then remove unneeded columns
-# fl.sf <- fl.sf %>% mutate(year = case_when(!is.na(year.y) ~ year.y, # if year.y, then year.y
-#                                            TRUE ~ year.x)) %>% # any other condition, year.x 
-#   select(-year.x, -year.y) # remove unneeded columns
-# 
-# # fix the two polygons that have comid rather than a objectid.
-# # the correct data are in fixYear.comid.  Using `replace` requires one comid at a time.
-# fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[1], fixYear.comid$year[1])) 
-# fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[2], fixYear.comid$year[2])) 
-# 
-# 
-# fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # up to 61,215 because we added year to 377 features from NW comid 120049464.  Good!
+fl.sf <- fl.sf %>% mutate(year = case_when(!is.na(year.y) ~ year.y, # if year.y, then year.y
+                                          TRUE ~ year.x)) %>% # any other condition, year.x
+ select(-year.x, -year.y) # remove unneeded columns
+
+# fix the two polygons that have comid rather than a objectid.
+# the correct data are in fixYear.comid.  Using `replace` requires one comid at a time.
+fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[1], fixYear.comid$year[1]))
+fl.sf <- fl.sf %>% mutate(year = replace(year, comid == fixYear.comid$comid[2], fixYear.comid$year[2]))
+
+
+fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # up to 61,215 because we added year to 377 features from NW comid 120049464.  Good!
 ```
 
 ### Define Flooded Land Type and Subtype {.hidden}
@@ -387,35 +386,34 @@ fixYear.comid <- fixYear %>% filter(!is.na(comid)) %>% select(-objectid)
 Per figure 7.2 in methodology, <8 ha is pond.  Canal/Ditch derived from FTYPE values.
 ```{r}
 # Define size threshold for ponds.
-# fl.sf <- fl.sf %>% mutate(subtype = case_when(area_ha_original < 8 ~ "freshwater pond",
-#                                               TRUE ~ "reservoir"),
-#                           subtype = case_when(ftype == "CanalDitch" ~ "canals and ditches",
-#                                               TRUE ~ subtype),
-#                           type = case_when(subtype == "reservoir" ~ "reservoir",
-#                                            TRUE ~ "other constructed waterbodies"))
-# 
-# table(fl.sf$type, useNA = "ifany") # no NA, good!
-# table(fl.sf$subtype, useNA = "ifany") # no NA, good!
+fl.sf <- fl.sf %>% mutate(subtype = case_when(area_ha_original < 8 ~ "freshwater pond",
+                                             TRUE ~ "reservoir"),
+                         subtype = case_when(ftype == "CanalDitch" ~ "canals and ditches",
+                                             TRUE ~ subtype),
+                         type = case_when(subtype == "reservoir" ~ "reservoir",
+                                          TRUE ~ "other constructed waterbodies"))
+table(fl.sf$type, useNA = "ifany") # no NA, good!
+table(fl.sf$subtype, useNA = "ifany") # no NA, good!
 
 # number of reservoirs pulled from NWI, NHD, and NAV.
 # this is useful for SuRGE work
 # NHD derived polygons
-# fl.sf %>% st_drop_geometry() %>% filter(comid %in% nhd$comid, type == "reservoir") %>% 
-#   summarise(n.nhd = n(), area.nhd = sum(area_ha_new)) #5,393 polygons; 1,798,962 hectares
-# 
-# # NWI derived polygons
-# fl.sf %>% st_drop_geometry() %>% filter(objectid %in% nwi$objectid, type == "reservoir") %>% 
-#   summarise(n.nwi = n(), area.nwi = sum(area_ha_new)) #70,036 polygons; 6,928,507 hectares
+fl.sf %>% st_drop_geometry() %>% filter(comid %in% nhd$comid, type == "reservoir") %>%
+ summarise(n.nhd = n(), area.nhd = sum(area_ha_new)) #5,393 polygons; 1,798,962 hectares
 
-# # NAV derived polygons
-# nav %>% st_drop_geometry() %>% 
-#   mutate(area_ha_original = original_area_meters / 10000,
-#          area_ha_new = area_meters / 10000) %>% 
-#   filter(area_ha_original > 8) %>% 
-#   summarize(n.nav = n(), area.nav = sum(area_ha_new)) # 31,119 polygons; 1,620,218 hectares
-# 
-# # write flooded land inventory to disk
-# st_write(fl.sf, "output/2023_Flooded_Lands_Inventory_Final_121923.gpkg")
+# NWI derived polygons
+fl.sf %>% st_drop_geometry() %>% filter(objectid %in% nwi$objectid, type == "reservoir") %>%
+ summarise(n.nwi = n(), area.nwi = sum(area_ha_new)) #70,036 polygons; 6,928,507 hectares
+
+# NAV derived polygons
+nav %>% st_drop_geometry() %>%
+ mutate(area_ha_original = original_area_meters / 10000,
+        area_ha_new = area_meters / 10000) %>%
+ filter(area_ha_original > 8) %>%
+ summarize(n.nav = n(), area.nav = sum(area_ha_new)) # 31,119 polygons; 1,620,218 hectares
+
+# write flooded land inventory to disk
+#st_write(fl.sf, "output/2023_Flooded_Lands_Inventory_Final_121923.gpkg", append = FALSE)
 ```
 
 
@@ -428,13 +426,13 @@ nrow(fl.df) # 6,535,554 good
 
 # EACH YEAR AS LIST ELEMENT
 # Need to calculate emission separately for each year in time series
-# Put copy of dataframe version sf object into 33 separate list elements.  Each element represents
+# Put copy of data frame version sf object into 33 separate list elements.  Each element represents
 # one calculation year.
 fl <- map(.x = rep("fl.df", 33), .f = get) # `get` will find all instances of X, map dumps into list
 tic() # weird, takes a while for operation to roll, but then tic toc reports 0.003 seconds
 names(fl) <- 1990:2022 # name each list element.  
 toc()
-format(object.size(fl), units = "auto") #277.9 GB as sf objects (outdated, actually bigger), 35.7 GB as dataframe!
+format(object.size(fl), units = "auto") #277.9 GB as sf objects (outdated, actually bigger), 34.9 GB as dataframe!
 
 # add calculation year as a column in each list element
 for (i in 1: length(fl)) { # do all elements simultaneously
@@ -504,7 +502,7 @@ Flooded Lands less than 8 Ha are classified as freshwater ponds for this invento
 ### All polygons {.hidden}
 ```{r, results="hide"}
 # Read in emission factors
-ef <- readxl::read_excel("flooded_lands/inputData/defaultEmissionFactors.xlsx") %>%
+ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
   select(subtype, lu, climate, co2.tonnes.ha.y, ch4.tonnes.ha.y)
 
 # record nrow of fl list prior to merge.  Should be identical after merge.
@@ -525,7 +523,11 @@ toc()
 
 # Make sure no records were lost during merge
 # LOOKS GOOD
-n.row.prior == map_dbl(fl.e, function(x) nrow(x))
+if (all(n.row.prior == map_dbl(fl.e, function(x) nrow(x)))) {
+  print("ALL GOOD")
+} else {
+  print("STOP, ERROR MERGING EFs")
+}
 
 # Calculate emissions
 # Downstream emissions are calculated as 9% of surface emissions.
@@ -912,7 +914,16 @@ Reservoirs are designed to store water for a wide range of purposes including hy
 #         legend.title = element_blank()) # remove legend title
 
 # MAPSF APPROACH------------------
-us <- USAboundaries::us_states()
+# load the map
+us <- tigris::states(cb = TRUE) %>% # coarse resolution
+  janitor::clean_names() %>%
+  select(name) %>%
+  # filter geographies not in Inventory
+  filter(!name %in% c("Commonwealth of the Northern Mariana Islands",
+                      "Guam", "United States Virgin Islands", "American Samoa"))
+
+# get the CRS information
+st_crs(us)
 
 # State boundaries for overlay
 sb <- us %>%
@@ -930,7 +941,8 @@ climate <- climate %>%
   left_join(cz.colors, by = c("climate"="zone"))
 
 # Intersect Climate zone with states
-us.cz <- st_intersection(us, climate)
+us.cz <- st_intersection(us, climate) %>%
+  st_collection_extract("POLYGON") # intersection creates weird geometries for AK. Extract ploygons
 
 # BREAK GEOGRAPHIES FOR INSETS AND PROJECT-
 # Define FLRFL in 2022
@@ -945,13 +957,12 @@ flrfl.2022 <- fl.sf %>%
 
 # CONUS
 conus <- us.cz %>% # state + climate polygons.  plots with color = NA to hide border lines
-  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
   st_transform(5070)
 
 conus.lines <- sb %>% # state border lines, no border lines for climate
-  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
   st_transform(5070)
-
 
 conus.fl <- flrfl.2022 %>%  # flooded lands
   filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
@@ -959,11 +970,11 @@ conus.fl <- flrfl.2022 %>%  # flooded lands
 
 # Alaska
 alaska <- us.cz %>%
-  filter(state_name == "Alaska")%>%
+  filter(name == "Alaska")%>%
   st_transform(3467)
 
 alaska.lines <- sb %>%
-  filter(state_name == "Alaska") %>%
+  filter(name == "Alaska") %>%
   st_transform(3467) %>%
   st_cast("MULTILINESTRING")
 
@@ -973,11 +984,11 @@ alaska.fl <- flrfl.2022 %>%
 
 # Hawaii
 hawaii <- us.cz %>%
-  filter(state_name == "Hawaii")%>%
+  filter(name == "Hawaii")%>%
   st_transform(crs = 32604)
 
 hawaii.lines <- sb %>%
-  filter(state_name == "Hawaii") %>%
+  filter(name == "Hawaii") %>%
   st_transform(crs = 32604) %>%
   st_cast("MULTILINESTRING")
 
@@ -987,11 +998,11 @@ hawaii.fl <- flrfl.2022 %>%
 
 # Puerto Rico
 pr <- us.cz %>%
-  filter(state_name == "Puerto Rico") %>%
+  filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619)
 
 pr.lines <- sb %>%
-  filter(state_name == "Puerto Rico") %>%
+  filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619) %>%
   st_cast("MULTILINESTRING")
 
@@ -1032,9 +1043,10 @@ mf_map(x = conus.fl,
        col = "black",
        add = TRUE)
 # Scale Bar
-mf_scale(size = 500, pos = "bottomright", unit = "mi",
+mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
          cex = 1.5)
 mf_inset_off()
+
 # Hawaii
 mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
 mf_map(hawaii, var = "climate", type = "typo",
@@ -1060,7 +1072,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1092,7 +1104,7 @@ mf_title("Puerto Rico",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 # close the inset
@@ -1124,7 +1136,7 @@ mf_title("Alaska",
          inner = TRUE)
 
 # Scale Bar
-mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1160,10 +1172,27 @@ Table 6-80 and Table 6-81 below summarize nationally aggregated CH4 emissions fr
 
 
 ### TABLE::  CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs {.hidden}
-Total CH4 emissions from reservoirs in FLRFL are shown in the text in both kt CH4 and MMT CH4-CO2-eq.  These tables are the top two tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Here I recreated the kt CH4 table as a check against the Excel calculations.
+Total CH4 emissions from reservoirs in FLRFL are shown in the text in both kt CH4 and MMT CH4-CO2-eq.  These tables are the top two tables in the "tables" tab of the spreadsheet and are calculated in Excel.  Lets create the tables here. Double check against Excel to confirm calculations.
 
 ```{r}
 # PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
+
+# MMT CO2-eq
+flrfl.ch4.national.subtype %>% 
+  filter(subtype == "reservoir") %>%
+  select(Activity, subtype, flux.type, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
+  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangement
+         across(where(is.numeric), ~round((./1000)*28))) %>% # convert to MMT CO2-eq
+  arrange(flux.type) %>%
+  # Create GT table of data
+  gt() %>%
+  tab_header(title = md(
+    "Table 6-80: CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs (MMT CO2 Eq.)"), 
+    subtitle = md("subtitle?")) %>% # No subtitle needed
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") %>%
+  opt_stylize(style = 1, color = "blue") 
+
+# kt CH4
 flrfl.ch4.national.subtype %>% 
   filter(subtype == "reservoir") %>%
   select(Activity, subtype, flux.type, "1990", "2005", "2018", "2019", "2020", "2021", "2022") %>%
@@ -1173,14 +1202,17 @@ flrfl.ch4.national.subtype %>%
   # Create GT table of data
   gt() %>%
   tab_header(title = md(
-    "Table 6-80: CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs (MMT CO2 Eq.)"), 
-    subtitle = md("subtitle?")) %>% # No subtitle needed
+    "Table 6-81: CH4 Emissions from Flooded Land Remaining Flooded Land—Reservoirs (kt CH4)")) %>% 
   tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") %>%
   opt_stylize(style = 1, color = "blue") 
   
-  
-
 ```
+
+Methane emissions from reservoirs in Texas, Florida, and Louisiana (Figure 6-11, Table 6-82) compose 34 percent of national CH4 emissions from reservoirs in 2022. Emissions from these states are particularly high due to 1) the large expanse of reservoirs in these states (Table 6-85) and 2) the high CH4 emission factor for the tropical dry/montane and topical moist climate zones which encompass a majority of the flooded land area in these states (Figure 6-10, Table 6-83).
+
+Methane emissions from reservoirs in flooded land remaining flooded land increased 6.4 percent from 1990 to 2022 due to the matriculation of reservoirs in land converted to flooded land to flooded land remaining flooded land.
+
+
 
 ### FIGURE::  Aggregated reservoir emissions plotted by state.
 ```{r, results="hide"}
@@ -1258,7 +1290,7 @@ mf_map(conus, var = "name", type = "typo",
        pal = conus$color, # pallete used in 1990-2020
        leg_pos = NA)
 # Scale Bar
-mf_scale(size = 500, pos = "bottomright", unit = "mi",
+mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
          cex = 1.5)
 mf_inset_off()
 
@@ -1278,7 +1310,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1301,7 +1333,7 @@ mf_title("Puerto Rico",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", unit = "mi",
+mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 # close the inset
@@ -1325,7 +1357,7 @@ mf_title("Alaska",
          inner = TRUE)
 
 # Scale Bar
-mf_scale(size = 1000, pos = "bottomleft", unit = "mi",
+mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1340,7 +1372,7 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.45,0.9))
 
-val.legend <-  seq(0, max(us.plot.flrfl.total.ch4.2022.reservoir$ch4.total.ktonnes.y), by = 1)
+val.legend <-  seq(0, max(us.plot.flrfl.total.ch4.2022.reservoir$ch4.total.ktonnes.y), by = 20)
 pal.legend <- scales::rescale(val.legend)
 
 mf_legend(type = "choro", pos = "left",
@@ -1370,9 +1402,10 @@ knitr::include_graphics("output/figures/FLRFL.reservoir.2022.Tch4.png")
 
 ```
 
-### TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state
-This table is written to "inventoryReportTablesFormattedFromR.xlsx", sheet = "FLRFL.res.ch4.by.stat", formatted, then pasted as table 6-75 in the report.
-Check the totals calculate by Excel against the top table in the tables tab of FloodedLands-Output_90-22_write_to_from_R.xlsx.
+### TABLE:: FLRFL-reservoirs CH4 emissions by mechanism (dn, surface) and state{.hidden}
+This table was previously written to "inventoryReportTablesFormattedFromR.xlsx", sheet = "FLRFL.res.ch4.by.stat", formatted, then pasted as table 6-75 in the report. Here we knit directly into the report.
+
+Check the totals calculated by Excel against the top table in the tables tab of FloodedLands-Output_90-22_write_to_from_R.xlsx.
 ```{r}
 flrfl.ch4.2022.reservoir.state <- 
   fl.e$`2022` %>%  
@@ -1383,22 +1416,22 @@ flrfl.ch4.2022.reservoir.state <-
   summarize(ch4.surface.tonnes.y = sum(ch4.surface.tonnes.y), 
             ch4.dn.tonnes.y = sum(ch4.dn.tonnes.y)) %>%
   mutate(ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y) %>%
-  mutate(across(where(is.numeric), ~.x/1000)) %>% # convert to kt
+  mutate(across(where(is.numeric), ~case_when(.x/1000 < 0.5 ~ "+",
+                                              TRUE ~ round(.x/1000, digits = 0) %>% as.character))) %>% # convert to kt
   rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), 
               .cols = contains("tonnes")) 
 
 # Create GT table of data
 gt(flrfl.ch4.2022.reservoir.state) %>%
   tab_header(title = md(
-    "FLRFL Reservoirs CH4 Emissions"), 
-    subtitle = md("kt by mechanism (dn, surface) and state")) %>%
-  tab_footnote(footnote = "footnote?") %>%
+    "Table 6-82: Surface and Downstream CH4 Emissions from Reservoirs in Flooded Land Remaining Flooded Land in 2022 (kt CH4)")) %>%
+  tab_footnote(footnote = "+ indicates values < 0.5 kt") %>%
     cols_label(
     name = "state", 
     ch4.surface.ktonnes.y = "surface",
     ch4.dn.ktonnes.y = "dn", 
     ch4.total.ktonnes.y = "total") %>%
-  fmt_number(decimals = 4) %>%
+  fmt_number(decimals = 0) %>%
   opt_stylize(style = 2, color = "cyan") 
 
 # paste into excel for formatting, then paste into Word.
@@ -1414,21 +1447,61 @@ gt(flrfl.ch4.2022.reservoir.state) %>%
 
 
 # TX, FL, LA proportion of total for text
-flrfl.ch4.2022.reservoir.state %>% 
-  ungroup() %>%
-  filter(name %in% c("Texas", "Florida", "Louisiana")) %>%
-  summarize(ch4.tot = sum(ch4.total.ktonnes.y)) %>% pull() /
-  sum(flrfl.ch4.2022.reservoir.state$ch4.total.ktonnes.y) 
+# Ideally this would be coded as inline code above.
+# flrfl.ch4.2022.reservoir.state %>% 
+#   ungroup() %>%
+#   filter(name %in% c("Texas", "Florida", "Louisiana")) %>%
+#   summarize(ch4.tot = sum(ch4.total.ktonnes.y)) %>% pull() /
+#   sum(flrfl.ch4.2022.reservoir.state$ch4.total.ktonnes.y) 
 
 
 ```
 
 
-### Methodology
-##### Area Estimates
-Reservoir age in FLRFL Flooded land age was determined from data in the NID when available (`r fl.e %>% pluck("2022") %>% filter(!is.na(year), type == "reservoir") %>% summarize(total.n = n()) %>% pull()` out of `r  fl.e %>% pluck("2022") %>% filter(type == "reservoir") %>% summarize(total.n = n()) %>% pull()`).  
+### Methodology and Time-Series Consistency
+Estimates of CH4 emission for reservoirs in flooded land remaining flooded land follow the Tier 1 methodology in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). Methane emissions from the surface of these flooded lands are calculated as the product of flooded land surface area and a climate-specific emission factor (Table 6-83). Downstream emissions are calculated as nine percent of the surface emission (Tier 1 default). Total CH4 emissions from reservoirs are calculated as the sum of surface and downstream emissions. National emissions are calculated as the sum of state emissions.
 
-The surface area of reservoirs in Flooded Land Remaining Flooded Land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase)` 6 percent from 1990 to 2022 due to reservoirs matriculating into Flooded Land Remaining Flooded Land when they reached 20 years of age.
+The IPCC default surface emission factors used in the Tier 1 methodology are derived from model-predicted (G-res model, Prairie et al. 2017) emission rates for all reservoirs in the Global Reservoir and Dam (GRanD) database (Lehner et al. 2011). Predicted emission rates were aggregated by the 11 IPCC climate zones (IPCC 2019, Table 7A.2) which were collapsed into six climate zones using a regression tree approach. All six aggregated climate zones are present in the United States.
+```{r}
+ef %>%
+  filter(subtype == "reservoir",
+         lu == "Flooded Land Remaining Flooded Land") %>%
+  select(climate, ch4.tonnes.ha.y) %>%
+gt() %>%
+  tab_header(title = md(
+    "Table 6-83: IPCC (2019) Default CH_4 Emission Factors for Surface Emission from Reservoirs in Flooded Land Remaining Flooded Land")) %>%
+  tab_footnote(footnote = "Note: downstream CH4 emissions are calculated as 9 percent of surface emissions. Downstream emissions are not calculated for CO2.") %>%
+     cols_label(
+       climate = "Climate",
+     ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})") %>%
+  fmt_number(decimals = 4) 
+
+```
+
+##### Area estimates
+U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),66 the National Inventory of Dams (NID),67 the National Wetlands Inventory (NWI),68 the Navigable Waterways (NW) network,69 and the EPA’s Safe Drinking Water Information System (SDWIS).70 The NHD only covers the conterminous U.S., whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico.
+
+Waterbodies in the NHDWaterbody layer that were greater than or equal to 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered reservoirs: 1) the waterbody was classified as “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to a nearby NID feature (between 100 m to 1000 m), 5) the waterbody intersected a public drinking water intake.
+
+EPA assumes that all features included in the NW network are subject to water-level management to maintain minimum water depths required for navigation and are therefore managed flooded lands. Navigable Waterway features greater than 8 ha in surface area are defined as reservoirs.
+
+NWI features were considered “managed” if they had a Special Modifier value indicating the presence of management activities (Figure 6-12). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see “Water Regime” in Figure 6-12). NWI features that met these criteria, were greater than 8 ha in surface area, and were not a canal/ditch (see emissions from land converted to flooded land – other constructed waterbodies) were defined as reservoirs.
+
+Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed.” The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control.
+
+Surface areas for identified flooded lands were taken from the NHD, NWI or NW. If features from the NHD, NWI, or NW datasets overlapped, duplicated areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies.
+
+Reservoir age was determined by assuming the waterbody was created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series.
+```{r}
+# insert NWI table
+
+```
+
+IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.
+
+Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau71) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the inventory.
+
+The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase)` percent from 1990 to 2022 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
 ######TABLE:: National Flooded Land Area for Reservoirs
 ```{r}
@@ -2562,11 +2635,11 @@ nrow(lcfl.2022) # 185 rows
 
 # CONUS
 conus <- us.cz %>% # state + climate polygons.  plots with color = NA to hide border lines
-  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
   st_transform(5070)
 
 conus.lines <- sb %>% # state border lines, no border lines for climate
-  filter(!state_name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
+  filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
   st_transform(5070)
 
 conus.fl <- lcfl.2022 %>%  # flooded lands
@@ -2575,11 +2648,11 @@ conus.fl <- lcfl.2022 %>%  # flooded lands
 
 # Alaska
 alaska <- us.cz %>%
-  filter(state_name == "Alaska")%>%
+  filter(name == "Alaska")%>%
   st_transform(3467)
 
 alaska.lines <- sb %>%
-  filter(state_name == "Alaska") %>%
+  filter(name == "Alaska") %>%
   st_transform(3467) %>%
   st_cast("MULTILINESTRING")
 
@@ -2589,11 +2662,11 @@ alaska.fl <- lcfl.2022 %>%
 
 # Hawaii
 hawaii <- us.cz %>%
-  filter(state_name == "Hawaii")%>%
+  filter(name == "Hawaii")%>%
   st_transform(crs = 32604)
 
 hawaii.lines <- sb %>%
-  filter(state_name == "Hawaii") %>%
+  filter(name == "Hawaii") %>%
   st_transform(crs = 32604) %>%
   st_cast("MULTILINESTRING")
 
@@ -2603,11 +2676,11 @@ hawaii.fl <- lcfl.2022 %>%
 
 # Puerto Rico
 pr <- us.cz %>%
-  filter(state_name == "Puerto Rico") %>%
+  filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619)
 
 pr.lines <- sb %>%
-  filter(state_name == "Puerto Rico") %>%
+  filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619) %>%
   st_cast("MULTILINESTRING")
 
