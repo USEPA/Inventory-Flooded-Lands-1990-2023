@@ -1,0 +1,21 @@
+LAGOSUS-package         R interface to the LAGOSUS lakes database
+coordinatize            Convert a LAGOSUS flat file into a spatial
+                        object
+depth                   LAGOSUS Depth data
+display_names           Convert table names for display
+lagos_ingest            Ingest LAGOSUS flat files
+lagosus_compile         Compile LAGOSUS data
+lagosus_get             Retrieve LAGOSUS flat files
+lagosus_load            Load LAGOSUS data
+lagosus_path            Return the cross-platform data path designated
+                        for LAGOSUS.
+lagosus_version         Latest LAGOSUS module versions
+lake_characteristics    LAGOSUS Lake characteristics
+lake_info               Get a summary of lake attribute information
+lake_information        LAGOSUS Lake information
+lake_link               LAGOSUS Identifier links
+lake_watersheds         LAGOSUS Lake watersheds
+query_column_keywords   Query column keywords
+query_column_names      Query column names
+query_lagos_names       Query LAGOSUS names
+source_table_locus      LAGOSUS Data sources

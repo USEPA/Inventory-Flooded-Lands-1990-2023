@@ -3133,7 +3133,7 @@ Uncertainty in estimates of CH4 emissions from other constructed waterbodies (po
 ```
 
 ### QA/QC and Verification
-The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.^[See https://www.epa.gov/national-aquatic-resource-surveys/national-lakes-assessment-2017-quality-assurance-project-plan.] The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
+The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.^[See NEED CITATION] The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
 
 General QA/QC procedures were applied to activity data, documentation, and emission calculations consistent with the U.S. Inventory QA/QC plan, which is in accordance with Vol. 1 Chapter 6 of 2006 IPCC Guidelines (see Annex 8 for more details). All calculations were executed independently in Excel and R. Ten percent of state and national totals were randomly selected for comparison between the two approaches to ensure there were no computational errors.
 
@@ -3717,12 +3717,6 @@ dev.off()
 
 ```
 
-```{r}
-
-# Load figure and render in markdown
-knitr::include_graphics("output/figures/LCFL.reservoir.2022.Tch4.svg")
-
-```
 
 ```{r, results="hide"}
 # 5. MAKE CO2 MAP-------
@@ -4062,10 +4056,10 @@ gt(fl.cl.area.state.type.gt.2) %>%
 ##### <!--FIGURE:: dams betwwen 1990 and 2022-->
 <!--Plotting data from NID, not just those contained in Inventory.-->
 **Figure 6-20: Number of Dams Built per Year from 1990 through 2022**
-```{r}
+```{r, warning=FALSE, message=FALSE, results="hide"}
 # just read in NID table, don't need spatial data
 # https://gis.stackexchange.com/questions/338674/reading-large-gpkg-file-in-r
-nid <- st_read("inputData/nation.gpkg", 
+nid <- st_read("inputData/nation.gpkg", quiet = TRUE,
                query = "select yearCompleted from main.dams")
 
 
@@ -4505,7 +4499,6 @@ to Flooded Land in 2022 (MT **CO<sub>2<sub>** Eq.)")) %>%
 
 
 ### <!--FIGURE 6-21:: Emissions by state-->
-<!--These figures need to be coerced into a 2-column by 1-row image.-->
 **Figure 6-21: 2022 A) CH~4~ and B) CO~2~ Emissions from Other Constructed Waterbodies (Freshwater Ponds) in Land Converted to Flooded Land (MT CO~2~ Eq.)**
 ```{r, results="hide"}
 
@@ -4894,7 +4887,7 @@ fl.cl.area.state.type.gt.3 <- fl.cl.area.state.type %>%
   # cols_label(subtype = "Surface Area (millions of ha)") %>%
   tab_stubhead(label = "Other Constructed Waterbodies") %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number(decimals = 1) %>%
+  fmt_number(decimals = 0) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",

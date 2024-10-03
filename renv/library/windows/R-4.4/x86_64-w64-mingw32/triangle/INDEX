@@ -1,0 +1,14 @@
+compare_triangle_fit    Compare multiple triangle distributions fits
+ltriangle               The Log-Triangle Distribution
+qqtriangle              Quantile-Quantile Plot for Triangle Distributed
+                        Data
+standard_triangle_mle   Maximum likelihood estimate of the standard
+                        triangle distribution mode
+summary.triangle_mle    Utility Methods for S3 class triangle_mle
+triangle                The Triangle Distribution
+triangle_cdfe           Triangle parameter estimates using a non-linear
+                        fit of the empirical CDF
+triangle_mle            Maximum likelihood estimate of the triangle
+                        distribution parameters
+triangle_mom            Triangle distribution method of moments
+                        estimate

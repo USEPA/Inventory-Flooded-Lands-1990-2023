@@ -1,0 +1,119 @@
+active_sheet-wb         Modify the state of active and selected sheets
+                        in a workbook
+as_xml                  loads character string to pugixml and returns
+                        an externalptr
+base_font-wb            Set the default font in a workbook
+clean_worksheet_name    Clean worksheet name
+col2int                 Convert Excel column to integer
+col_widths-wb           Modify column widths of a worksheet
+convert_date            Convert from Excel date, datetime or hms number
+                        to R Date type
+convert_to_excel_date   convert back to an Excel Date
+create_border           Helper to create a border
+create_cell_style       Helper to create a cell style
+create_colors_xml       Create custom color xml schemes
+create_dxfs_style       Create a custom formatting style
+create_fill             Create fill pattern
+create_font             Create font format
+create_hyperlink        Create Excel hyperlink string
+create_numfmt           Create number format
+create_sparklines       Create sparklines object
+create_tablestyle       Create custom (pivot) table styles
+creators-wb             Modify creators of a workbook
+dims_helper             Helper functions to work with 'dims'
+filter-wb               Add/remove column filters in a worksheet
+fmt_txt                 format strings independent of the cell style.
+grouping-wb             Group rows and columns in a worksheet
+int2col                 Convert integer to Excel column
+named_region-wb         Modify named regions in a worksheet
+openxlsx2-deprecated    Deprecated functions in package _openxlsx2_
+openxlsx2_options       Options consulted by openxlsx2
+person-wb               Helper for adding threaded comments
+print.pugi_xml          print pugi_xml
+properties-wb           Modify workbook properties
+pugixml                 xml_node
+read_xml                read xml file
+row_heights-wb          Modify row heights of a worksheet
+sheet_names-wb          Get / Set worksheet names for a workbook
+sheet_visibility-wb     Get/set worksheet visible state in a workbook
+styles_on_sheet         Get all styles on a sheet
+temp_xlsx               helper function to create temporary directory
+                        for testing purpose
+waivers                 'openxlsx2' waivers
+wbWorkbook              Workbook class
+wb_add_border           Modify borders in a cell region of a worksheet
+wb_add_cell_style       Modify the style in a cell region
+wb_add_chart_xml        Add a chart XML to a worksheet
+wb_add_chartsheet       Add a chartsheet to a workbook
+wb_add_comment          Add comment to worksheet
+wb_add_conditional_formatting
+                        Add conditional formatting to cells in a
+                        worksheet
+wb_add_data             Add data to a worksheet
+wb_add_data_table       Add a data table to a worksheet
+wb_add_data_validation
+                        Add data validation to cells in a worksheet
+wb_add_drawing          Add drawings to a worksheet
+wb_add_dxfs_style       Set a dxfs styling for the workbook
+wb_add_fill             Modify the background fill color in a cell
+                        region
+wb_add_font             Modify font in a cell region
+wb_add_form_control     Add a checkbox, radio button or drop menu to a
+                        cell in a worksheet
+wb_add_formula          Add a formula to a cell range in a worksheet
+wb_add_ignore_error     Ignore error types on worksheet
+wb_add_image            Insert an image into a worksheet
+wb_add_mips             wb get and apply MIP section
+wb_add_mschart          Add mschart object to a worksheet
+wb_add_named_style      Apply styling to a cell region with a named
+                        style
+wb_add_numfmt           Modify number formatting in a cell region
+wb_add_page_break       Add a page break to a worksheet
+wb_add_pivot_table      Add a pivot table to a worksheet
+wb_add_plot             Insert the current plot into a worksheet
+wb_add_slicer           Add a slicer/timeline to a pivot table
+wb_add_sparklines       Add sparklines to a worksheet
+wb_add_style            Set the default style in a workbook
+wb_add_thread           Add threaded comments to a cell in a worksheet
+wb_add_worksheet        Add a worksheet to a workbook
+wb_base_colors          Set the default colors in a workbook
+wb_cell_style           Apply styling to a cell region
+wb_clean_sheet          Remove all values in a worksheet
+wb_clone_sheet_style    Apply styling from a sheet to another within a
+                        workbook
+wb_clone_worksheet      Create copies of a worksheet within a workbook
+wb_color                Helper to create a color
+wb_comment              Helper to create a comment object
+wb_copy_cells           Copy cells around within a worksheet
+wb_data                 Add the 'wb_data' attribute to a data frame in
+                        a worksheet
+wb_dims                 Helper to specify the 'dims' argument
+wb_freeze_pane          Freeze pane of a worksheet
+wb_get_tables           List Excel tables in a worksheet
+wb_load                 Load an existing .xlsx, .xlsm or .xlsb file
+wb_merge_cells          Merge cells within a worksheet
+wb_open                 Preview a workbook in a spreadsheet software
+wb_order                Order worksheets in a workbook
+wb_page_setup           Set page margins, orientation and print scaling
+                        of a worksheet
+wb_protect              Protect a workbook from modifications
+wb_protect_worksheet    Protect a worksheet from modifications
+wb_remove_tables        Remove a data table from a worksheet
+wb_remove_worksheet     Remove a worksheet from a workbook
+wb_save                 Save a workbook to file
+wb_set_bookview         Set the workbook position, size and filter
+wb_set_grid_lines       Modify grid lines visibility in a worksheet
+wb_set_header_footer    Set headers and footers of a worksheet
+wb_set_last_modified_by
+                        Modify author in the metadata of a workbook
+wb_set_sheetview        Modify the default view of a worksheet
+wb_to_df                Create a data frame from a Workbook
+wb_update_table         Update a data table position in a worksheet
+wb_workbook             Create a new Workbook object
+write_xlsx              Write data to an xlsx file
+xl_open                 Open an xlsx file or a 'wbWorkbook' object
+xml_add_child           append xml child to node
+xml_attr_mod            adds or updates attribute(s) in existing xml
+                        node
+xml_node_create         create xml_node from R objects
+xml_rm_child            remove xml child to node

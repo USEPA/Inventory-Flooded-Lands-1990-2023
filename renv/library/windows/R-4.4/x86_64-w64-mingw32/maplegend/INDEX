@@ -1,0 +1,3 @@
+leg                     Plot a single map legend
+leg_comp                Compose a map legend
+leg_draw                Plot a composed map legend

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Rob Carnell" />
+
+<meta name="date" content="2022-12-12" />
+
+<title>Triangle Distribution Math</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+
+
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Triangle Distribution Math</h1>
+<h4 class="author">Rob Carnell</h4>
+<h4 class="date">2022-12-12</h4>
+
+
+
+<div id="triangle-notation" class="section level2">
+<h2>Triangle Notation</h2>
+<p><img src="data:image/png;base64,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" /><!-- --></p>
+<ul>
+<li><span class="math inline">\(a\)</span> = minimum</li>
+<li><span class="math inline">\(b\)</span> = maximum</li>
+<li><span class="math inline">\(c\)</span> = mode</li>
+<li><span class="math inline">\(h\)</span> = density at the mode = <span class="math inline">\(\frac{2}{b-a}\)</span></li>
+</ul>
+</div>
+<div id="triangle-pdf" class="section level2">
+<h2>Triangle PDF</h2>
+<p><span class="math display">\[f(x) =
+\left\{
+    \begin{array}{ll}
+        \frac{h}{c-a}(x-a)  &amp; \mbox{if } a \leq x \leq c \\
+        \frac{h}{c-b}(x-b) &amp; \mbox{if } c &lt; x \leq b \\
+        0 &amp; \mbox{otherwise}
+    \end{array}
+\right.\ \ \ \ (1)\]</span></p>
+<p>Integrating the pdf in equation (1) to solve for h</p>
+<p><span class="math display">\[\int f(x) dx = 1\]</span></p>
+<p><span class="math display">\[\frac{h}{c-a}\int_{a}^{c} (x-a) dx +
+\frac{h}{c-b} \int_{c}^{b} (x-b) dx = \frac{h(b-a)}{2}\]</span></p>
+<p><span class="math display">\[h=\frac{2}{b-a}\ \ \ \ (2)\]</span></p>
+<p>Substituting back into equation (1),</p>
+<p><span class="math display">\[f(x) =
+\left\{
+    \begin{array}{ll}
+        \frac{2}{(b-a)(c-a)}(x-a)  &amp; \mbox{if } a \leq x \leq c \\
+        \frac{2}{(b-a)(c-b)}(x-b) &amp; \mbox{if } c &lt; x \leq b \\
+        0 &amp; \mbox{otherwise}
+    \end{array}
+\right.\ \ \ \ (3)\]</span></p>
+</div>
+<div id="triangle-mean" class="section level2">
+<h2>Triangle Mean</h2>
+<p>Integrating equation (3) to find <span class="math inline">\(E(x)\)</span>,</p>
+<p><span class="math display">\[E(X)=\int xf(x)dx =
+\frac{h}{c-a}\int_a^c (x^2-ax) dx +
+\frac{h}{c-b}\int_c^b (x^2-bx) dx\]</span></p>
+<p><span class="math display">\[=\frac{a+b+c}{3}\ \ \ \ (3)\]</span></p>
+</div>
+<div id="triangle-variance" class="section level2">
+<h2>Triangle Variance</h2>
+<p><span class="math display">\[V(X) = E(X^2) - \big(E(X)\big)^2 = \int
+x^2f(x)dx- \bigg(\frac{a+b+c}{3}\bigg)^2\]</span></p>
+<p><span class="math display">\[=\frac{h}{c-a}\int_{a}^{c} x^2(x-a) dx +
+\frac{h}{c-b} \int_{c}^{b} x^2(x-b) dx-
+\bigg(\frac{a+b+c}{3}\bigg)^2\]</span></p>
+<p><span class="math display">\[=\frac{a^2+b^2+c^2-ab-ac-bc}{18}\]</span></p>
+</div>
+<div id="logarithmic-triangle-distribution" class="section level2">
+<h2>Logarithmic Triangle distribution</h2>
+<p>Define:</p>
+<p><span class="math display">\[a_l=\log_{\phi}(a),\ \
+b_l=\log_{\phi}(b),\ \ c_l=\log_{\phi}(c),\ \ h=\frac{2}{b_l-a_l}, \ \
+\phi = \mbox{log base}\]</span></p>
+<p><span class="math display">\[f(z) =
+\left\{
+  \begin{array}{ll}
+    \frac{h}{c_l - a_l}(z - a_l) &amp; \mbox{if } a_l \leq z \leq c_l \\
+    \frac{h}{c_l - b_l}(z - b_l) &amp; \mbox{if } c_l &lt; z \leq b_l \\
+    0 &amp; \mbox{otherwise}
+  \end{array}
+\right.\ \ \ \ (4)\]</span></p>
+<p>However,</p>
+<p><span class="math display">\[E({\phi}^z) \neq {\phi}^{E(z)}\ \ \ \
+(5)\]</span></p>
+<p>Therefore, transforming…</p>
+<p><span class="math display">\[Y={\phi}^Z\]</span></p>
+<p><span class="math display">\[Z=\log_{\phi}(Y)\]</span></p>
+<p><span class="math display">\[w(y)=\log_{\phi}(y)\]</span></p>
+<p><span class="math display">\[w&#39;(y)=\frac{dz}{dy} =
+\frac{1}{y\log({\phi})}\]</span></p>
+<p><span class="math display">\[g(y)=f(w(y))w&#39;(y)\]</span></p>
+<p><span class="math display">\[g(y) =
+\left\{
+  \begin{array}{ll}
+    \frac{2}{(c_l-a_l)(b_l-a_l)\log({\phi})}\frac{log_{\phi}(y) -
+a_l}{y} &amp; \mbox{if } 0 &lt; a \leq y \leq c \\
+    \frac{2}{(c_l-b_l)(b_l-a_l)\log({\phi})}\frac{log_{\phi}(y) -
+b_l}{y} &amp; \mbox{if } c &lt; y \leq b \\
+    0 &amp; \mbox{otherwise}
+  \end{array}
+\right.\ \ \ \ (5)\]</span></p>
+<p>Define:</p>
+<p><span class="math display">\[\beta_1=\frac{2}{(c_l-a_l)(b_l-a_l)}\]</span></p>
+<p><span class="math display">\[\beta_2=\frac{2}{(c_l-b_l)(b_l-a_l)}\]</span></p>
+<p>Finding the CDF,</p>
+<p><span class="math display">\[G(y)=\int_{-\infty}^y
+g(y)dy\]</span></p>
+<p><span class="math display">\[\mbox{for}\ a \leq y \leq c,\ \ G(y) =
+\frac{\beta_1}{\log({\phi})} \int_a^y
+\frac{\log(y)}{y\log({\phi})}-\frac{a_l}{y}dy\]</span></p>
+<p><span class="math display">\[=\beta_1
+\bigg[\frac{\log_{\phi}^2(y)}{2} - a_l \log_{\phi}(y) - \frac{a_l^2}{2}
++ a_l^2\bigg]\]</span></p>
+<p><span class="math display">\[\mbox{for}\ c &lt; y \leq b,\ \ G(y) =
+G(c) + \frac{\beta_2}{\log({\phi})} \int_c^y
+\frac{\log(y)}{y\log({\phi})} - \frac{b_l}{y}dy\]</span></p>
+<p><span class="math display">\[=G(c) + \beta_2
+\bigg[\frac{\log_{\phi}^2(y)}{2} - b_l \log_{\phi}(y) - \frac{c_l^2}{2}
++ b_l c_l\bigg]\]</span></p>
+<p>Checking that the CDF is 1 at b,</p>
+<p><span class="math display">\[G(b) = \frac{c_l^2 - 2a_l c_l +
+a_l^2}{(c_l-a_l)(b_l-a_l)} +
+\frac{-b_l^2-c_l^2+2b_lc_l}{(c_l-b_l)(b_l-a_l)}\]</span></p>
+<p><span class="math display">\[= \frac{c_l-a_l}{b_l-a_l} +
+\frac{-(c_l-b_l)}{b_l-a_l} = 1\]</span></p>
+<p>Now calculating <span class="math inline">\(E(y)\)</span>,</p>
+<p><span class="math display">\[E(y) = \int y\ g(y)\ dy\]</span></p>
+<p><span class="math display">\[=\frac{\beta_1}{\log({\phi})} \int_a^c
+\bigg[\frac{\log(y)}{\log({\phi})} - a_l\bigg]dy +
+\frac{\beta_2}{\log({\phi})} \int_c^b \bigg[\frac{\log(y)}{\log({\phi})}
+- b_l\bigg]dy\]</span></p>
+<p><span class="math display">\[=\frac{c\beta_1}{\log^2({\phi})}
+\bigg[\log(c) - 1 - \log(a) + \frac{a}{c} \bigg] +
+\frac{c\beta_2}{\log^2({\phi})} \bigg[\frac{-b}{c} - \log(c) + 1 +
+\log(b) \bigg]\]</span></p>
+</div>
+<div id="method-of-moments" class="section level2">
+<h2>Method of Moments</h2>
+<p><span class="math display">\[E(x) = \frac{a + b + c}{3}\]</span></p>
+<p><span class="math display">\[c = 3E(x) - a - b = 3E(x) - \min(x) -
+\max(x)\]</span></p>
+</div>
+<div id="maximum-likelihood-estimation" class="section level2">
+<h2>Maximum Likelihood Estimation</h2>
+<p>The procedure for maximum likelihood estimation involves maximizing
+the likelihood with respect to <span class="math inline">\(c\)</span>
+for a fixed <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span>, followed by minimizing the negative
+log likelihood with respect to <span class="math inline">\(a\)</span>
+and <span class="math inline">\(b\)</span> for a fixed <span class="math inline">\(c\)</span>.</p>
+<div id="maximizing-the-likelihood-with-respect-to-c" class="section level3">
+<h3>Maximizing the Likelihood with respect to <span class="math inline">\(c\)</span></h3>
+<p>This discussion follows the results from <a href="https://doi.org/10.1142/5720">Samuel Kotz and Johan Rene van Dorp.
+Beyond Beta</a></p>
+<p>For the purposes of this section, with a fixed <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span>, the sample can be easily rescaled to
+<span class="math inline">\(a=0\)</span> and <span class="math inline">\(b=1\)</span>. This section will proceed on <span class="math inline">\([0,1]\)</span> with the mode at <span class="math inline">\(0 \le c \le 1\)</span></p>
+<p><span class="math display">\[w(x) =
+\left\{
+  \begin{array}{ll}
+    \frac{2x}{c} &amp; \mbox{if } 0 \le x \lt c \\
+    \frac{2(1-x)}{1-c} &amp; \mbox{if } c \le x \leq 1 \\
+    0 &amp; \mbox{otherwise}
+  \end{array}
+\right.\]</span></p>
+<p><span class="math display">\[L(x|c) = \prod_{i}^{n}
+w(x|c)\]</span></p>
+<p>Assume that the sample is ordered into order statistics <span class="math inline">\(X_{(1)} \lt \dots \lt X_{(n)}\)</span>. Also, note
+that <span class="math inline">\(X_{(r)} \le c \lt X_{(r+1)}\)</span>.
+In other words, the mode falls between the <span class="math inline">\(r^{th}\)</span> and <span class="math inline">\(r+1\)</span> order statistics.</p>
+<p><span class="math display">\[L(x|c) = \prod_{i=1}^{r}
+\frac{2x_{(i)}}{c} \prod_{i=r+1}^{n} \frac{2(1-x_{(i)})}{1-c} =
+\frac{2^n \prod_{i=1}^{r} x_{(i)} \prod_{i=r+1}^{n}
+(1-x_{(i)})}{c^r(1-c)^{n-r}}\]</span></p>
+<p>To maximize the likelihood, we can first maximize with respect to
+<span class="math inline">\(r\)</span> and then locate <span class="math inline">\(c\)</span> between the <span class="math inline">\(r^{th}\)</span> and <span class="math inline">\(r+1\)</span> order statistics. For notation
+purposes, also define <span class="math inline">\(X_{(0)} = 0\)</span>
+and <span class="math inline">\(X_{(n+1)} = 1\)</span>.</p>
+<p><span class="math display">\[\large \max_{0 \le c \le 1} L(x|c) =
+\max_{r \ \epsilon \ (0,\dots,n)} \ \ \max_{x_{(r)} \le c \le x_{(r+1)}}
+\ \ L(x|c)\]</span></p>
+<div id="case-1.-c-is-between-the-first-and-second-to-last-order-statistic-r-epsilon-1-dots-n-1" class="section level4">
+<h4>Case 1. <span class="math inline">\(c\)</span> is between the first
+and second to last order statistic <span class="math inline">\(r \
+\epsilon \ (1, \dots, n-1)\)</span></h4>
+<p>Noticing that maximizing the likelihood is equivalent to minimizing
+the denominator:</p>
+<p><span class="math display">\[\large \max L(x|c) = \max_{r \ \epsilon
+\ (1,\dots,n-1)} \ \ \min_{x_{(r)} \le c \le x_{(r+1)}} \ \
+c^r(1-c)^{n-r}\]</span></p>
+<p>Since <span class="math inline">\(c^r(1-c)^{n-r}\)</span> is unimodal
+with respect to <span class="math inline">\(c\)</span>, it should be
+sufficient to test the end points of an interval to find the minimum on
+the interval</p>
+<p><span class="math display">\[\large = \max_{r \ \epsilon \
+(1,\dots,n-1)} \ \ \min_{c \ \epsilon \ (x_{(r)},\ \ x_{(r+1)})} \ \
+c^r(1-c)^{n-r}\]</span></p>
+<p>Therefore, for this case, it is sufficient to test the likelihood
+using <span class="math inline">\(c\)</span> at each of the sampled
+points and find the largest.</p>
+<div id="side-note-on-zcr1-cn-r-being-unimodal" class="section level5">
+<h5>Side note on <span class="math inline">\(z=c^r(1-c)^{n-r}\)</span>
+being unimodal</h5>
+<p><span class="math display">\[\frac{dz}{dc} = rc^{(r-1)}(1-c)^{n-r} +
+c^r(n-r)(1-c)^{n-r-1}(-1) = c^{(r-1)}(1-c)^{n-r-1}(r - cn)\]</span></p>
+<p><span class="math inline">\(\frac{dz}{dc} = 0\)</span> at <span class="math inline">\(c=0,\ 1,\ \frac{r}{n}\)</span>. At <span class="math inline">\(0 &lt; c &lt; \frac{r}{n}\)</span>, <span class="math inline">\(z\)</span> is positive, and at <span class="math inline">\(\frac{r}{n} &lt; c &lt; 1\)</span>, <span class="math inline">\(z\)</span> is negative. Therefore, <span class="math inline">\(z\)</span> is unimodal on <span class="math inline">\((0,1)\)</span>.</p>
+</div>
+</div>
+<div id="case-2.-c-is-between-0-and-the-first-order-statistic-r-0" class="section level4">
+<h4>Case 2. <span class="math inline">\(c\)</span> is between 0 and the
+first order statistic <span class="math inline">\(r = 0\)</span></h4>
+<p><span class="math display">\[\large \max L(x|c) = \max_{0 \le c \le
+x_{(1)}} \prod_{i=1}^{n} \frac{1-x_{(i)}}{1-c} = \prod_{i=1}^{n}
+\frac{1-x_{(i)}}{1-x_{(1)}}\]</span></p>
+<p>Choosing the largest endpoint in the interval, creates the smallest
+denominator, and the largest likelihood.</p>
+<p>Therefore, for this case, it is sufficient to test the likelihood
+using <span class="math inline">\(c\)</span> at the first sampled
+point.</p>
+</div>
+<div id="case-3.-c-is-between-the-last-order-statistic-r-n-and-1" class="section level4">
+<h4>Case 3. <span class="math inline">\(c\)</span> is between the last
+order statistic <span class="math inline">\(r = n\)</span> and 1</h4>
+<p><span class="math display">\[\large \max L(x|c) = \max_{x_{(n)} \le c
+\le 1} \prod_{i=1}^{n} \frac{x_{(i)}}{c} = \prod_{i=1}^{n}
+\frac{x_{(i)}}{x_{(n)}}\]</span></p>
+<p>Choosing the smallest option in the denominator creates the largest
+likelihood. Again, it is sufficient to test the likelihood using <span class="math inline">\(c\)</span> at the largest sample point.</p>
+</div>
+<div id="all-cases" class="section level4">
+<h4>All Cases</h4>
+<p>For all cases, it is sufficient to compute the sample likelihood
+using <span class="math inline">\(c\)</span> equal to each of the
+samples, and choosing the largest likelihood from the <span class="math inline">\(n\)</span> options to find the corresponding <span class="math inline">\(c\)</span>. This calculation is performed with a
+fixed <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span>, so the test must be performed
+iteratively as <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span> are separately optimized.</p>
+</div>
+</div>
+<div id="negative-log-likelihood" class="section level3">
+<h3>Negative Log Likelihood</h3>
+<p><span class="math display">\[nLL = -\log(L) = -\log\left(\prod_i^n
+f(x_i)\right)\]</span></p>
+<p><span class="math display">\[ = - \sum_i^n \log\left(f(x_i)\right) =
+- \sum_{i: \ a \le x_i \lt c}^{n_1} \log\left(f(x_i)\right) - \sum_{i: \
+c \le x_i \le b}^{n_2} \log\left(f(x_i)\right)\]</span></p>
+<p>where <span class="math inline">\(n = n_1 + n_2\)</span></p>
+<div id="case-1-a-c-lt-b" class="section level4">
+<h4>Case 1 <span class="math inline">\(a = c \lt b\)</span></h4>
+<p><span class="math display">\[ nLL = - \sum_{i}^{n} \log(2) +
+\log(b-x_i) - \log(b-a) - \log(b-c)\]</span></p>
+<p><span class="math display">\[ = -n\log(2) + n\log(b-a) + n \log(b-c)
+- \sum_{i}^{n} \log(b-x_i)\]</span></p>
+</div>
+<div id="case-2-a-lt-c-b" class="section level4">
+<h4>Case 2 <span class="math inline">\(a \lt c = b\)</span></h4>
+<p><span class="math display">\[ = - \sum_{i}^{n} \log(2) + \log(x_i -
+a) - \log(b-a) - \log(c-a) \]</span></p>
+<p><span class="math display">\[ = -n\log(2) + n\log(b-a) + n\log(c-a) -
+\sum_{i}^{n} \log(x_i - a)\]</span></p>
+</div>
+<div id="case-3-a-c-b" class="section level4">
+<h4>Case 3 a c b</h4>
+<p><span class="math display">\[ = - \sum_{i: \ a \lt x_i \lt c}^{n_1}
+\log(2) + \log(x_i - a) - \log(b-a) - \log(c-a) - \sum_{i: \ c \le x_i
+\lt b}^{n_2} \log(2) + \log(b-x_i) - \log(b-a) - \log(b-c)\]</span></p>
+<p><span class="math display">\[ = -n\log(2) + n\log(b-a) + n_1\log(c-a)
++ n_2 \log(b-c) - \sum_{i: \ a \lt x_i \lt c}^{n_1} \log(x_i - a) -
+\sum_{i: \ c \le x_i \lt b}^{n_2} \log(b-x_i)\]</span></p>
+</div>
+</div>
+<div id="gradient-of-the-negative-log-likelihood-given-c" class="section level3">
+<h3>Gradient of the negative Log Likelihood Given <span class="math inline">\(c\)</span>:</h3>
+<p>The negative log likelihood is not differentiable with respect to
+<span class="math inline">\(c\)</span> because the limits of the sum
+(<span class="math inline">\(n_1\)</span> and <span class="math inline">\(n_2\)</span>) are functions of <span class="math inline">\(c\)</span>. There the gradient and hessian are
+derived as if <span class="math inline">\(c\)</span> is fixed.</p>
+<div id="case-1-a-c-lt-b-1" class="section level4">
+<h4>Case 1 <span class="math inline">\(a = c \lt b\)</span></h4>
+<p><span class="math display">\[\frac{\partial nLL}{\partial a} = -
+\frac{n}{b-a}\]</span></p>
+<p><span class="math display">\[\frac{\partial nLL}{\partial b} =
+\frac{n}{b-a} + \frac{n}{b-c} - \sum_i^{n} \frac{1}{b-x_i}\]</span></p>
+</div>
+<div id="case-2-a-lt-c-b-1" class="section level4">
+<h4>Case 2 <span class="math inline">\(a \lt c = b\)</span></h4>
+<p><span class="math display">\[\frac{\partial nLL}{\partial a} = -
+\frac{n}{b-a} - \frac{n}{c-a} + \sum_i^{n} \frac{1}{x_i -
+a}\]</span></p>
+<p><span class="math display">\[\frac{\partial nLL}{\partial b} =
+\frac{n}{b-a}\]</span></p>
+</div>
+<div id="case-3-a-c-b-1" class="section level4">
+<h4>Case 3 a c b</h4>
+<p><span class="math display">\[\frac{\partial nLL}{\partial a} = -
+\frac{n}{b-a} - \frac{n_1}{c-a} + \sum_i^{n_1} \frac{1}{x_i -
+a}\]</span></p>
+<p><span class="math display">\[\frac{\partial nLL}{\partial b} =
+\frac{n}{b-a} + \frac{n_2}{b-c} - \sum_i^{n_2}
+\frac{1}{b-x_i}\]</span></p>
+</div>
+</div>
+<div id="hessian-of-the-negative-log-likelihood-given-c" class="section level3">
+<h3>Hessian of the negative Log Likelihood Given <span class="math inline">\(c\)</span>:</h3>
+<div id="case-1-a-c-lt-b-2" class="section level4">
+<h4>Case 1 <span class="math inline">\(a = c \lt b\)</span></h4>
+<p><span class="math display">\[\frac{\partial^2nLL}{\partial a^2} = -
+\frac{n}{(b-a)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial b^2} =
+-\frac{n}{(b-a)^2} - \frac{n}{(b-c)^2} + \sum_i^{n}
+\frac{1}{(b-x_i)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial a\partial
+b} = \frac{\partial^2 nLL}{\partial b\partial a} = -
+\frac{n}{(b-a)^2}\]</span></p>
+</div>
+<div id="case-2-a-lt-c-b-2" class="section level4">
+<h4>Case 2 <span class="math inline">\(a \lt c = b\)</span></h4>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial a^2} = -
+\frac{n}{(b-a)^2} - \frac{n}{(c-a)^2} + \sum_i^{n} \frac{1}{(x_i -
+a)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial b^2} = -
+\frac{n}{(b-a)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial a\partial
+b} = \frac{\partial^2 nLL}{\partial b\partial a} = -
+\frac{n}{(b-a)^2}\]</span></p>
+</div>
+<div id="case-3-a-lt-c-lt-b" class="section level4">
+<h4>Case 3 <span class="math inline">\(a \lt c \lt b\)</span></h4>
+<p><span class="math display">\[\frac{\partial^2 nLL}{\partial a^2} = -
+\frac{n}{(b-a)^2} - \frac{n_1}{(c-a)^2} + \sum_i^{n_1} \frac{1}{(x_i -
+a)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial ^2 nLL}{\partial b^2} =
+-\frac{n}{(b-a)^2} - \frac{n_2}{(b-c)^2} + \sum_i^{n_2}
+\frac{1}{(b-x_i)^2}\]</span></p>
+<p><span class="math display">\[\frac{\partial ^2 nLL}{\partial
+a\partial b} = \frac{\partial ^2 nLL}{\partial b\partial a} = -
+\frac{n}{(b-a)^2}\]</span></p>
+</div>
+</div>
+<div id="mle-variance-co-variance" class="section level3">
+<h3>MLE Variance Co-variance</h3>
+<p>For the optimization of <span class="math inline">\((a,b)\)</span>
+given <span class="math inline">\(c\)</span>, we can use the inverse of
+the hessian of the negative log likelihood for an estimate of the
+covariance matrix of <span class="math inline">\(\hat{a}\)</span> and
+<span class="math inline">\(\hat{b}\)</span>. For the variance in <span class="math inline">\(\hat{c}\)</span>, we use the variance of the <span class="math inline">\(r^{th}\)</span> order statistic which corresponds
+to <span class="math inline">\(c\)</span>. The covariance of <span class="math inline">\((a,b)\)</span> and <span class="math inline">\(c\)</span> is not computed because the negative
+log likelihood is not differentiable with respect to <span class="math inline">\(c\)</span>.</p>
+<p>Let <span class="math inline">\(H\)</span> denote the Hessian matrix,
+and let <span class="math inline">\(H^{-1}[1,1]\)</span> be the <span class="math inline">\(V(\hat{a})\)</span>, <span class="math inline">\(H^{-1}[2,2]\)</span> be the <span class="math inline">\(V(\hat{b})\)</span>, and <span class="math inline">\(H^{-1}[1,2] = H^{-1}[2,1]\)</span> be the <span class="math inline">\(Cov(\hat{a}, \hat{b})\)</span>. Then,</p>
+<p><span class="math display">\[ V([\hat{a}, \hat{b}, \hat{c}]) =   
+\begin{bmatrix}
+   H^{-1}[1,1] &amp; H^{-1}[1,2] &amp; 0  \\
+   H^{-1}[2,1] &amp; H^{-1}[2,2] &amp; 0  \\
+   0 &amp; 0 &amp; V(\hat{c})  \\
+\end{bmatrix}
+\]</span></p>
+<div id="rth-order-statistic" class="section level4">
+<h4><span class="math inline">\(r^{th}\)</span> order statistic</h4>
+<p><span class="math display">\[f(x_{(r)}) = \frac{n!}{(r-1)!(n-r)!}
+f(x) [F(x)]^{(r-1)}[1-F(x)]^{(n-r)}\]</span></p>
+<p>A closed form solution to <span class="math inline">\(V(X_{(r)})\)</span> is not easily obtainable for
+the triangle, so numerical integration is used with <span class="math inline">\(f(x)\)</span> as <code>dtriangle</code> and <span class="math inline">\(F(x)\)</span> as <code>ptriangle</code>.</p>
+<p><span class="math display">\[V\left(X_{(r)}\right) = \int_a^b x^2
+f(x_{(r)}) dx - \left[\int_a^b x f(x_{(r)}) dx \right]^2\]</span></p>
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

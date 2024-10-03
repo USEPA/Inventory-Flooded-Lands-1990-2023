@@ -1,0 +1,43 @@
+Package: LAGOSUS
+Title: Interface to the Lake Multi-Scaled Geospatial and Temporal
+        Database
+Version: 0.0.4
+Authors@R: c(
+    person("Jemma", "Stachelek", 
+    email = "stachel2@msu.edu", 
+    role = c("aut", "cre"), 
+    comment = c(ORCID = c("0000-0002-5924-2464")))
+    )
+URL: https://github.com/cont-limno/LAGOSUS
+BugReports: https://github.com/cont-limno/LAGOSUS/issues
+Description: Client for programmatic access to the Lake
+    Multi-scaled Geospatial and Temporal database <https://lagoslakes.org>, with functions
+    for accessing lake water quality and ecological context data for the US.
+Depends: R (>= 3.5.0)
+Imports: dplyr (>= 0.8.99), rappdirs (>= 0.3.1), lazyeval (>= 0.2),
+        purrr (>= 0.2.2.2), magrittr (>= 1.5), sf, curl (>= 2.7.0),
+        stringr (>= 1.2.0), tibble, tidyr, memoise, rlang, progress,
+        qs, snakecase
+Suggests: testthat, withr, knitr, rmarkdown, devtools, R.rsp, printr,
+        ggplot2, mapview
+License: GPL
+Encoding: UTF-8
+RoxygenNote: 7.2.0
+Roxygen: list(markdown = TRUE)
+VignetteBuilder: R.rsp, knitr
+Language: en-US
+RemoteType: github
+RemoteHost: api.github.com
+RemoteRepo: LAGOSUS
+RemoteUsername: cont-limno
+RemoteRef: HEAD
+RemoteSha: 04c56ae7f92b57e9dee47f3a868d515210a0bdcc
+GithubRepo: LAGOSUS
+GithubUsername: cont-limno
+GithubRef: HEAD
+GithubSHA1: 04c56ae7f92b57e9dee47f3a868d515210a0bdcc
+NeedsCompilation: no
+Packaged: 2024-05-09 14:11:51 UTC; JBEAULIE
+Author: Jemma Stachelek [aut, cre] (<https://orcid.org/0000-0002-5924-2464>)
+Maintainer: Jemma Stachelek <stachel2@msu.edu>
+Built: R 4.4.0; ; 2024-05-09 14:11:51 UTC; windows

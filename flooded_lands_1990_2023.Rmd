@@ -329,7 +329,7 @@ fl.sf %>% st_drop_geometry() %>%
 
 ### <!--Fabricate age data for freshwater ponds.-->
 <!--We need some numbers for freshwater ponds in LCFL to populate tables and figures. Just make something up until I can fix this with Alex-->
-```{r, results="hide}
+```{r, results="hide"}
 fl.sf <- fl.sf %>%
   mutate(year = case_when(subtype == "freshwater pond" ~ sample(1950:2020, size = n(), replace = TRUE), # random # between 1950 and 2020
                           TRUE ~ year)) # else leave as is
@@ -1495,7 +1495,7 @@ gt(ef.gt) %>%
 ```
 
 ##### Area estimates
-U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),66 the National Inventory of Dams (NID),67 the National Wetlands Inventory (NWI),68 the Navigable Waterways (NW) network,69 and the EPA’s Safe Drinking Water Information System (SDWIS).70 The NHD only covers the conterminous U.S., whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico.
+U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),^[See https://www.usgs.gov/core-science-systems/ngp/national-hydrography.] the National Inventory of Dams (NID),^[See https://nid.sec.usace.army.mil.] the National Wetlands Inventory (NWI),^[See https://www.fws.gov/program/national-wetlands-inventory/data-download.] the Navigable Waterways (NW) network,^[See https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about.] and the EPA’s Safe Drinking Water Information System (SDWIS).^[See https://www.epa.gov/enviro/sdwis-overview. Not publicly available due to security concerns] The NHD only covers the conterminous U.S., whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico.
 
 Waterbodies in the NHDWaterbody layer that were greater than or equal to 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered reservoirs: 1) the waterbody was classified as “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to a nearby NID feature (between 100 m to 1000 m), 5) the waterbody intersected a public drinking water intake.
 
@@ -1515,7 +1515,7 @@ Reservoir age was determined by assuming the waterbody was created the same year
 
 IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.
 
-Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau71) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the inventory.
+Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau^[See https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html.]) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the inventory.
 
 The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase)` percent from 1990 to 2022 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
@@ -1658,7 +1658,7 @@ The National Inventory of Dams (NID) data are updated regularly. The version of 
 The net effect of these recalculations was an average annual increase in CH4 emission estimates from reservoirs of 1.23 MMT CO2 Eq., or 4 percent, over the time series from 1990 to 2021 compared to the previous Inventory.
 
 ##### Planned Improvements
-The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.72 The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
+The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.^[See https://www.epa.gov/air-research/research-emissions-us-reservoirs.] The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
 
 ## Emissions from Flooded Land Remaining Flooded Land-Other Constructed Waterbodies
 The IPCC (IPCC 2019) provides emission factors for several types of “other constructed waterbodies” including freshwater ponds and canals/ditches. IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” Furthermore, the IPCC “Decision tree for types of Flooded Land” (IPCC 2019, Fig. 7.2) defines a size threshold of 8 ha to distinguish reservoirs from “other constructed waterbodies.” For this Inventory, ponds are defined as managed flooded land that are 1) less than 8 ha in surface area, and 2) not categorized as canals/ditches. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH4 emissions than the latter. Activity data on pond salinity are not uniformly available for the conterminous United States and all ponds in the inventory are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are often sites of substantial CH4 emissions from anaerobic sediments.
@@ -2307,7 +2307,7 @@ gt(ef.gt.2) %>%
 
 ```
 ##### Area Estimates
-Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD), the National Inventory of Dams (NID), the National Wetlands Inventory (NWI), the Navigable Waterways (NW) network, and the EPA’s Safe Drinking Water Information System (SDWIS). The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, District of Columbia, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI.
+Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),^[See https://www.usgs.gov/core-science-systems/ngp/national-hydrography.] the National Inventory of Dams (NID), the National Wetlands Inventory (NWI),^[See https://nid.sec.usace.army.mil.] the Navigable Waterways (NW) network,^[See https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about.] and the EPA’s Safe Drinking Water Information System (SDWIS).^[See https://www.epa.gov/enviro/sdwis-overview. Not publicly available due to security concerns.] The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, District of Columbia, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI.
 
 Waterbodies in the NHDWaterbody layer that were greater than 20-years old, less than 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered freshwater ponds in flooded land remaining flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m), the waterbody intersected a drinking water intake.
 
@@ -2999,7 +2999,7 @@ Uncertainty in estimates of CH4 emissions from other constructed waterbodies (po
 ```
 
 ### QA/QC and Verification
-The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.78 The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
+The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.^[CITATION NEEDED]. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
 
 General QA/QC procedures were applied to activity data, documentation, and emission calculations consistent with the U.S. Inventory QA/QC plan, which is in accordance with Vol. 1 Chapter 6 of 2006 IPCC Guidelines (see Annex 8 for more details). All calculations were executed independently in Excel and R. Ten percent of state and national totals were randomly selected for comparison between the two approaches to ensure there were no computational errors.
 
@@ -3583,12 +3583,6 @@ dev.off()
 
 ```
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics("output/figures/LCFL.reservoir.2023.Tch4.svg")
-
-```
-
 ```{r, results="hide"}
 # 5. MAKE CO2 MAP-------
 
@@ -3708,7 +3702,7 @@ dev.off()
 
 ```{r}
 # Load figure and render in markdown
-knitr::include_graphics("output/figures/LCFL.reservoir.2023.co2.svg")
+knitr::include_graphics(c("output/figures/LCFL.reservoir.2023.co2.svg", "output/figures/LCFL.reservoir.2023.Tch4.svg"))
 
 ```
 
@@ -3850,7 +3844,7 @@ gt(ef.gt.3) %>%
 
 
 #### Area estimates
-U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),84 the National Inventory of Dams (NID),85 the National Wetlands Inventory (NWI),86 and the Navigable Waterways (NW) network,87 and the EPA’s Safe Drinking Water Information System (SDWIS).88 The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI. 
+U.S. reservoirs were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),^[See https://www.usgs.gov/core-science-systems/ngp/national-hydrography.] the National Inventory of Dams (NID),^[See https://nid.sec.usace.army.mil.] the National Wetlands Inventory (NWI),^[See https://www.fws.gov/program/national-wetlands-inventory/data-download.] and the Navigable Waterways (NW) network,^[See https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about.] and the EPA’s Safe Drinking Water Information System (SDWIS).^[See https://www.epa.gov/enviro/sdwis-overview. Not publicly available due to security concerns.] The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI. 
 
 Waterbodies in the NHDWaterbody layer that were less than or equal to 20-years old, greater than or equal to 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered reservoirs in land converted to flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m). 
 
@@ -3876,9 +3870,9 @@ knitr::include_graphics("inputData/NWI_criteria.png")
 
 IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.  
 
-Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau89) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the Inventory. 
+Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau^[See https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html.]) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the Inventory. 
 
-The surface area of reservoirs in land converted to flooded land decreased by nearly 90 percent from 1990 to 2022 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2022, versus 552 in 1990 (Figure 6-20). 
+The surface area of reservoirs in land converted to flooded land decreased by nearly 90 percent from 1990 to 2022 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2022,^[See https://nid.sec.usace.army.mil.] versus 552 in 1990 (Figure 6-20). 
 
 ##### <!--TABLE:: National Totals of Reservoir Surface Area in Land Converted to Flooded Land (thousands of ha)-->
 
@@ -3928,10 +3922,10 @@ gt(fl.cl.area.state.type.gt.2) %>%
 Plotting data from NID, not just those contained in Inventory.
 
 **Figure 6-20: Number of Dams Built per Year from 1990 through 2023**
-```{r}
+```{r, warning=FALSE, message=FALSE, results="hide"}
 # just read in NID table, don't need spatial data
 # https://gis.stackexchange.com/questions/338674/reading-large-gpkg-file-in-r
-nid <- st_read("inputData/nation.gpkg", 
+nid <- st_read("inputData/nation.gpkg", quiet = TRUE,
                query = "select yearCompleted from main.dams")
 
 
@@ -4113,7 +4107,7 @@ lcfl.ghg.national.subtype %>%
 ```
 
 ### Planned Improvements
-The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.91 The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
+The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.^[See https://www.epa.gov/air-research/research-emissions-us-reservoirs.] The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
 
 ## Emissions from Land Converted to Flooded Land–Other Constructed Waterbodies
 Freshwater ponds are the only type of flooded lands within the “other constructed waterbodies” subcategory of land converted to flooded land that are included in this Inventory (see Methodology for details) because age data are not available for canals and ditches. All canals and ditches are assumed to be greater than 20-years old throughout the time series and are included in flooded land remaining flooded land.  
@@ -4723,7 +4717,7 @@ gt(ef.gt.4) %>%
 
 ```
 #### Area Estimates
-Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),92 the National Inventory of Dams (NID),93 the National Wetlands Inventory (NWI),94 and the Navigable Waterways (NW) network95, and the EPA’s Safe Drinking Water Information System (SDWIS)96. The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. 
+Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),^[See https://www.usgs.gov/core-science-systems/ngp/national-hydrography.] the National Inventory of Dams (NID),^[See https://nid.sec.usace.army.mil.] the National Wetlands Inventory (NWI),^[See https://www.fws.gov/program/national-wetlands-inventory/data-download.] and the Navigable Waterways (NW) network^[See https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about.], and the EPA’s Safe Drinking Water Information System (SDWIS)^[See https://www.epa.gov/enviro/sdwis-overview. Not publicly available due to security concerns]. The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, and Puerto Rico. 
 
 Waterbodies in the NHDWaterbody layer that were less than or equal to 20-years old, less than 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered freshwater ponds in land converted to flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m). 
 
@@ -4761,7 +4755,7 @@ fl.cl.area.state.type.gt.3 <- fl.cl.area.state.type %>%
   # cols_label(subtype = "Surface Area (millions of ha)") %>%
   tab_stubhead(label = "Other Constructed Waterbodies") %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number(decimals = 1) %>%
+  fmt_number(decimals = 0) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -5051,7 +5045,7 @@ gt(lcfl.ocwb.area.state.gt %>%
 
 ##### <!--TABLE:: Flooded Land Area for Other Constructed Waterbodies by State: full time series-->
 <!--This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == lcfl.ocwb.area.state.-->
-```{r, results="hide}
+```{r, results="hide"}
 
 lcfl.ocwb.area.state.all <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
@@ -5623,3 +5617,21 @@ Features < 8 ha in the NW that were not identified as canal/ditch were defined a
 
 <!-- ``` -->
 
+
+```{r clean markdown script, results="hide"}
+
+# This code chunk read this script, removes any text inside the regex below, 
+# and saves a new Markdown script for knitting called flooded_lands_cleaned.Rmd
+
+# Read the R Markdown file
+flooded_lands_script <- readLines("flooded_lands_1990_2023.Rmd")
+
+# Use gsub to remove Headings
+flooded_lands_cleaned <- gsub(
+  "# <!--.*?-->|## <!--.*?-->|### <!--.*?-->|#### <!--.*?-->|##### <!--.*?-->|###### <!--.*?-->", 
+                              "", flooded_lands_script)
+
+# Write the cleaned content back to the file
+writeLines(flooded_lands_cleaned, "flooded_lands_1990_2023_cleaned.Rmd")
+
+```

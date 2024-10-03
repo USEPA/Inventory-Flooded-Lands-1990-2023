@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head><title>R: Read, Write and Edit 'xlsx' Files</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body><div class="container">
+<h1> Read, Write and Edit 'xlsx' Files
+<img class="toplogo" src="../../../doc/html/Rlogo.svg" alt="[R logo]" />
+</h1>
+<hr/>
+<div style="text-align: center;">
+<a href="../../../doc/html/packages.html"><img class="arrow" src="../../../doc/html/left.jpg" alt="[Up]" /></a>
+<a href="../../../doc/html/index.html"><img class="arrow" src="../../../doc/html/up.jpg" alt="[Top]" /></a>
+</div><h2>Documentation for package &lsquo;openxlsx2&rsquo; version 1.8</h2>
+
+<ul><li><a href="../DESCRIPTION">DESCRIPTION file</a>.</li>
+<li><a href="../doc/index.html">User guides, package vignettes and other documentation.</a></li>
+<li><a href="../NEWS">Package NEWS</a>.</li>
+</ul>
+
+<h2>Help Pages</h2>
+
+
+<p style="text-align: center;">
+<a href="#A">A</a>
+<a href="#B">B</a>
+<a href="#C">C</a>
+<a href="#D">D</a>
+<a href="#F">F</a>
+<a href="#G">G</a>
+<a href="#I">I</a>
+<a href="#N">N</a>
+<a href="#O">O</a>
+<a href="#P">P</a>
+<a href="#R">R</a>
+<a href="#S">S</a>
+<a href="#T">T</a>
+<a href="#W">W</a>
+<a href="#X">X</a>
+<a href="#misc">misc</a>
+</p>
+
+
+<h2><a id="A">-- A --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="active_sheet-wb.html">active_sheet-wb</a></td>
+<td>Modify the state of active and selected sheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="fmt_txt.html">as.character.fmt_txt</a></td>
+<td>format strings independent of the cell style.</td></tr>
+<tr><td style="width: 25%;"><a href="as_xml.html">as_xml</a></td>
+<td>loads character string to pugixml and returns an externalptr</td></tr>
+</table>
+
+<h2><a id="B">-- B --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="base_font-wb.html">base_font-wb</a></td>
+<td>Set the default font in a workbook</td></tr>
+</table>
+
+<h2><a id="C">-- C --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="clean_worksheet_name.html">clean_worksheet_name</a></td>
+<td>Clean worksheet name</td></tr>
+<tr><td style="width: 25%;"><a href="col2int.html">col2int</a></td>
+<td>Convert Excel column to integer</td></tr>
+<tr><td style="width: 25%;"><a href="col_widths-wb.html">col_widths-wb</a></td>
+<td>Modify column widths of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="convert_date.html">convert_date</a></td>
+<td>Convert from Excel date, datetime or hms number to R Date type</td></tr>
+<tr><td style="width: 25%;"><a href="convert_date.html">convert_datetime</a></td>
+<td>Convert from Excel date, datetime or hms number to R Date type</td></tr>
+<tr><td style="width: 25%;"><a href="convert_date.html">convert_hms</a></td>
+<td>Convert from Excel date, datetime or hms number to R Date type</td></tr>
+<tr><td style="width: 25%;"><a href="convert_to_excel_date.html">convert_to_excel_date</a></td>
+<td>convert back to an Excel Date</td></tr>
+<tr><td style="width: 25%;"><a href="create_border.html">create_border</a></td>
+<td>Helper to create a border</td></tr>
+<tr><td style="width: 25%;"><a href="create_cell_style.html">create_cell_style</a></td>
+<td>Helper to create a cell style</td></tr>
+<tr><td style="width: 25%;"><a href="create_colors_xml.html">create_colors_xml</a></td>
+<td>Create custom color xml schemes</td></tr>
+<tr><td style="width: 25%;"><a href="create_colors_xml.html">create_colours_xml</a></td>
+<td>Create custom color xml schemes</td></tr>
+<tr><td style="width: 25%;"><a href="create_dxfs_style.html">create_dxfs_style</a></td>
+<td>Create a custom formatting style</td></tr>
+<tr><td style="width: 25%;"><a href="create_fill.html">create_fill</a></td>
+<td>Create fill pattern</td></tr>
+<tr><td style="width: 25%;"><a href="create_font.html">create_font</a></td>
+<td>Create font format</td></tr>
+<tr><td style="width: 25%;"><a href="create_hyperlink.html">create_hyperlink</a></td>
+<td>Create Excel hyperlink string</td></tr>
+<tr><td style="width: 25%;"><a href="create_numfmt.html">create_numfmt</a></td>
+<td>Create number format</td></tr>
+<tr><td style="width: 25%;"><a href="create_tablestyle.html">create_pivottablestyle</a></td>
+<td>Create custom (pivot) table styles</td></tr>
+<tr><td style="width: 25%;"><a href="create_sparklines.html">create_sparklines</a></td>
+<td>Create sparklines object</td></tr>
+<tr><td style="width: 25%;"><a href="create_tablestyle.html">create_tablestyle</a></td>
+<td>Create custom (pivot) table styles</td></tr>
+<tr><td style="width: 25%;"><a href="creators-wb.html">creators-wb</a></td>
+<td>Modify creators of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="waivers.html">current_sheet</a></td>
+<td>'openxlsx2' waivers</td></tr>
+</table>
+
+<h2><a id="D">-- D --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="dims_helper.html">dims_helper</a></td>
+<td>Helper functions to work with 'dims'</td></tr>
+<tr><td style="width: 25%;"><a href="dims_helper.html">dims_to_rowcol</a></td>
+<td>Helper functions to work with 'dims'</td></tr>
+</table>
+
+<h2><a id="F">-- F --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="filter-wb.html">filter-wb</a></td>
+<td>Add/remove column filters in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="fmt_txt.html">fmt_txt</a></td>
+<td>format strings independent of the cell style.</td></tr>
+</table>
+
+<h2><a id="G">-- G --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="grouping-wb.html">grouping-wb</a></td>
+<td>Group rows and columns in a worksheet</td></tr>
+</table>
+
+<h2><a id="I">-- I --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="int2col.html">int2col</a></td>
+<td>Convert integer to Excel column</td></tr>
+</table>
+
+<h2><a id="N">-- N --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="named_region-wb.html">named_region-wb</a></td>
+<td>Modify named regions in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="waivers.html">na_strings</a></td>
+<td>'openxlsx2' waivers</td></tr>
+<tr><td style="width: 25%;"><a href="waivers.html">next_sheet</a></td>
+<td>'openxlsx2' waivers</td></tr>
+</table>
+
+<h2><a id="O">-- O --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="openxlsx2-deprecated.html">openxlsx2-deprecated</a></td>
+<td>Deprecated functions in package _openxlsx2_</td></tr>
+<tr><td style="width: 25%;"><a href="openxlsx2_options.html">openxlsx2_options</a></td>
+<td>Options consulted by openxlsx2</td></tr>
+</table>
+
+<h2><a id="P">-- P --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="person-wb.html">person-wb</a></td>
+<td>Helper for adding threaded comments</td></tr>
+<tr><td style="width: 25%;"><a href="fmt_txt.html">print.fmt_txt</a></td>
+<td>format strings independent of the cell style.</td></tr>
+<tr><td style="width: 25%;"><a href="print.pugi_xml.html">print.pugi_xml</a></td>
+<td>print pugi_xml</td></tr>
+<tr><td style="width: 25%;"><a href="properties-wb.html">properties-wb</a></td>
+<td>Modify workbook properties</td></tr>
+<tr><td style="width: 25%;"><a href="pugixml.html">pugixml</a></td>
+<td>xml_node</td></tr>
+</table>
+
+<h2><a id="R">-- R --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="wb_to_df.html">read_xlsx</a></td>
+<td>Create a data frame from a Workbook</td></tr>
+<tr><td style="width: 25%;"><a href="read_xml.html">read_xml</a></td>
+<td>read xml file</td></tr>
+<tr><td style="width: 25%;"><a href="dims_helper.html">rowcol_to_dims</a></td>
+<td>Helper functions to work with 'dims'</td></tr>
+<tr><td style="width: 25%;"><a href="row_heights-wb.html">row_heights-wb</a></td>
+<td>Modify row heights of a worksheet</td></tr>
+</table>
+
+<h2><a id="S">-- S --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="sheet_names-wb.html">sheet_names-wb</a></td>
+<td>Get / Set worksheet names for a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="sheet_visibility-wb.html">sheet_visibility-wb</a></td>
+<td>Get/set worksheet visible state in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="styles_on_sheet.html">styles_on_sheet</a></td>
+<td>Get all styles on a sheet</td></tr>
+</table>
+
+<h2><a id="T">-- T --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="temp_xlsx.html">temp_xlsx</a></td>
+<td>helper function to create temporary directory for testing purpose</td></tr>
+</table>
+
+<h2><a id="W">-- W --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="waivers.html">waivers</a></td>
+<td>'openxlsx2' waivers</td></tr>
+<tr><td style="width: 25%;"><a href="wbWorkbook.html">wbWorkbook</a></td>
+<td>Workbook class</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_border.html">wb_add_border</a></td>
+<td>Modify borders in a cell region of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_cell_style.html">wb_add_cell_style</a></td>
+<td>Modify the style in a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_chartsheet.html">wb_add_chartsheet</a></td>
+<td>Add a chartsheet to a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_chart_xml.html">wb_add_chart_xml</a></td>
+<td>Add a chart XML to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_comment.html">wb_add_comment</a></td>
+<td>Add comment to worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_conditional_formatting.html">wb_add_conditional_formatting</a></td>
+<td>Add conditional formatting to cells in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="creators-wb.html">wb_add_creators</a></td>
+<td>Modify creators of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_data.html">wb_add_data</a></td>
+<td>Add data to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_data_table.html">wb_add_data_table</a></td>
+<td>Add a data table to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_data_validation.html">wb_add_data_validation</a></td>
+<td>Add data validation to cells in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_drawing.html">wb_add_drawing</a></td>
+<td>Add drawings to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_dxfs_style.html">wb_add_dxfs_style</a></td>
+<td>Set a dxfs styling for the workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_fill.html">wb_add_fill</a></td>
+<td>Modify the background fill color in a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="filter-wb.html">wb_add_filter</a></td>
+<td>Add/remove column filters in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_font.html">wb_add_font</a></td>
+<td>Modify font in a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_formula.html">wb_add_formula</a></td>
+<td>Add a formula to a cell range in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_form_control.html">wb_add_form_control</a></td>
+<td>Add a checkbox, radio button or drop menu to a cell in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_ignore_error.html">wb_add_ignore_error</a></td>
+<td>Ignore error types on worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_image.html">wb_add_image</a></td>
+<td>Insert an image into a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_mips.html">wb_add_mips</a></td>
+<td>wb get and apply MIP section</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_mschart.html">wb_add_mschart</a></td>
+<td>Add mschart object to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="named_region-wb.html">wb_add_named_region</a></td>
+<td>Modify named regions in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_named_style.html">wb_add_named_style</a></td>
+<td>Apply styling to a cell region with a named style</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_numfmt.html">wb_add_numfmt</a></td>
+<td>Modify number formatting in a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_page_break.html">wb_add_page_break</a></td>
+<td>Add a page break to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="person-wb.html">wb_add_person</a></td>
+<td>Helper for adding threaded comments</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_pivot_table.html">wb_add_pivot_table</a></td>
+<td>Add a pivot table to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_plot.html">wb_add_plot</a></td>
+<td>Insert the current plot into a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_slicer.html">wb_add_slicer</a></td>
+<td>Add a slicer/timeline to a pivot table</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_sparklines.html">wb_add_sparklines</a></td>
+<td>Add sparklines to a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_style.html">wb_add_style</a></td>
+<td>Set the default style in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_thread.html">wb_add_thread</a></td>
+<td>Add threaded comments to a cell in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_slicer.html">wb_add_timeline</a></td>
+<td>Add a slicer/timeline to a pivot table</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_worksheet.html">wb_add_worksheet</a></td>
+<td>Add a worksheet to a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_base_colors.html">wb_base_colors</a></td>
+<td>Set the default colors in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_cell_style.html">wb_cell_style</a></td>
+<td>Apply styling to a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_clean_sheet.html">wb_clean_sheet</a></td>
+<td>Remove all values in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_clone_sheet_style.html">wb_clone_sheet_style</a></td>
+<td>Apply styling from a sheet to another within a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_clone_worksheet.html">wb_clone_worksheet</a></td>
+<td>Create copies of a worksheet within a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_color.html">wb_color</a></td>
+<td>Helper to create a color</td></tr>
+<tr><td style="width: 25%;"><a href="wb_color.html">wb_colour</a></td>
+<td>Helper to create a color</td></tr>
+<tr><td style="width: 25%;"><a href="wb_comment.html">wb_comment</a></td>
+<td>Helper to create a comment object</td></tr>
+<tr><td style="width: 25%;"><a href="wb_copy_cells.html">wb_copy_cells</a></td>
+<td>Copy cells around within a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_data.html">wb_data</a></td>
+<td>Add the 'wb_data' attribute to a data frame in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_dims.html">wb_dims</a></td>
+<td>Helper to specify the 'dims' argument</td></tr>
+<tr><td style="width: 25%;"><a href="wb_freeze_pane.html">wb_freeze_pane</a></td>
+<td>Freeze pane of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="active_sheet-wb.html">wb_get_active_sheet</a></td>
+<td>Modify the state of active and selected sheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_base_colors.html">wb_get_base_colors</a></td>
+<td>Set the default colors in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_base_colors.html">wb_get_base_colours</a></td>
+<td>Set the default colors in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="base_font-wb.html">wb_get_base_font</a></td>
+<td>Set the default font in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_cell_style.html">wb_get_cell_style</a></td>
+<td>Apply styling to a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_comment.html">wb_get_comment</a></td>
+<td>Add comment to worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="creators-wb.html">wb_get_creators</a></td>
+<td>Modify creators of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_mips.html">wb_get_mips</a></td>
+<td>wb get and apply MIP section</td></tr>
+<tr><td style="width: 25%;"><a href="named_region-wb.html">wb_get_named_regions</a></td>
+<td>Modify named regions in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_order.html">wb_get_order</a></td>
+<td>Order worksheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="person-wb.html">wb_get_person</a></td>
+<td>Helper for adding threaded comments</td></tr>
+<tr><td style="width: 25%;"><a href="properties-wb.html">wb_get_properties</a></td>
+<td>Modify workbook properties</td></tr>
+<tr><td style="width: 25%;"><a href="active_sheet-wb.html">wb_get_selected</a></td>
+<td>Modify the state of active and selected sheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="sheet_names-wb.html">wb_get_sheet_names</a></td>
+<td>Get / Set worksheet names for a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="sheet_visibility-wb.html">wb_get_sheet_visibility</a></td>
+<td>Get/set worksheet visible state in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_get_tables.html">wb_get_tables</a></td>
+<td>List Excel tables in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_thread.html">wb_get_thread</a></td>
+<td>Add threaded comments to a cell in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_grid_lines.html">wb_grid_lines</a></td>
+<td>Modify grid lines visibility in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="grouping-wb.html">wb_group_cols</a></td>
+<td>Group rows and columns in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="grouping-wb.html">wb_group_rows</a></td>
+<td>Group rows and columns in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_load.html">wb_load</a></td>
+<td>Load an existing .xlsx, .xlsm or .xlsb file</td></tr>
+<tr><td style="width: 25%;"><a href="wb_merge_cells.html">wb_merge_cells</a></td>
+<td>Merge cells within a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_open.html">wb_open</a></td>
+<td>Preview a workbook in a spreadsheet software</td></tr>
+<tr><td style="width: 25%;"><a href="wb_order.html">wb_order</a></td>
+<td>Order worksheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_page_setup.html">wb_page_setup</a></td>
+<td>Set page margins, orientation and print scaling of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_protect.html">wb_protect</a></td>
+<td>Protect a workbook from modifications</td></tr>
+<tr><td style="width: 25%;"><a href="wb_protect_worksheet.html">wb_protect_worksheet</a></td>
+<td>Protect a worksheet from modifications</td></tr>
+<tr><td style="width: 25%;"><a href="wb_to_df.html">wb_read</a></td>
+<td>Create a data frame from a Workbook</td></tr>
+<tr><td style="width: 25%;"><a href="col_widths-wb.html">wb_remove_col_widths</a></td>
+<td>Modify column widths of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_comment.html">wb_remove_comment</a></td>
+<td>Add comment to worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_conditional_formatting.html">wb_remove_conditional_formatting</a></td>
+<td>Add conditional formatting to cells in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="creators-wb.html">wb_remove_creators</a></td>
+<td>Modify creators of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="filter-wb.html">wb_remove_filter</a></td>
+<td>Add/remove column filters in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="named_region-wb.html">wb_remove_named_region</a></td>
+<td>Modify named regions in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="row_heights-wb.html">wb_remove_row_heights</a></td>
+<td>Modify row heights of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_slicer.html">wb_remove_slicer</a></td>
+<td>Add a slicer/timeline to a pivot table</td></tr>
+<tr><td style="width: 25%;"><a href="wb_remove_tables.html">wb_remove_tables</a></td>
+<td>Remove a data table from a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_add_slicer.html">wb_remove_timeline</a></td>
+<td>Add a slicer/timeline to a pivot table</td></tr>
+<tr><td style="width: 25%;"><a href="wb_remove_worksheet.html">wb_remove_worksheet</a></td>
+<td>Remove a worksheet from a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_save.html">wb_save</a></td>
+<td>Save a workbook to file</td></tr>
+<tr><td style="width: 25%;"><a href="active_sheet-wb.html">wb_set_active_sheet</a></td>
+<td>Modify the state of active and selected sheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_base_colors.html">wb_set_base_colors</a></td>
+<td>Set the default colors in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_base_colors.html">wb_set_base_colours</a></td>
+<td>Set the default colors in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="base_font-wb.html">wb_set_base_font</a></td>
+<td>Set the default font in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_bookview.html">wb_set_bookview</a></td>
+<td>Set the workbook position, size and filter</td></tr>
+<tr><td style="width: 25%;"><a href="wb_cell_style.html">wb_set_cell_style</a></td>
+<td>Apply styling to a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="wb_cell_style.html">wb_set_cell_style_across</a></td>
+<td>Apply styling to a cell region</td></tr>
+<tr><td style="width: 25%;"><a href="col_widths-wb.html">wb_set_col_widths</a></td>
+<td>Modify column widths of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="creators-wb.html">wb_set_creators</a></td>
+<td>Modify creators of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_grid_lines.html">wb_set_grid_lines</a></td>
+<td>Modify grid lines visibility in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_header_footer.html">wb_set_header_footer</a></td>
+<td>Set headers and footers of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_last_modified_by.html">wb_set_last_modified_by</a></td>
+<td>Modify author in the metadata of a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_order.html">wb_set_order</a></td>
+<td>Order worksheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="properties-wb.html">wb_set_properties</a></td>
+<td>Modify workbook properties</td></tr>
+<tr><td style="width: 25%;"><a href="row_heights-wb.html">wb_set_row_heights</a></td>
+<td>Modify row heights of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="active_sheet-wb.html">wb_set_selected</a></td>
+<td>Modify the state of active and selected sheets in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_set_sheetview.html">wb_set_sheetview</a></td>
+<td>Modify the default view of a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="sheet_names-wb.html">wb_set_sheet_names</a></td>
+<td>Get / Set worksheet names for a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="sheet_visibility-wb.html">wb_set_sheet_visibility</a></td>
+<td>Get/set worksheet visible state in a workbook</td></tr>
+<tr><td style="width: 25%;"><a href="wb_to_df.html">wb_to_df</a></td>
+<td>Create a data frame from a Workbook</td></tr>
+<tr><td style="width: 25%;"><a href="grouping-wb.html">wb_ungroup_cols</a></td>
+<td>Group rows and columns in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="grouping-wb.html">wb_ungroup_rows</a></td>
+<td>Group rows and columns in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_merge_cells.html">wb_unmerge_cells</a></td>
+<td>Merge cells within a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_update_table.html">wb_update_table</a></td>
+<td>Update a data table position in a worksheet</td></tr>
+<tr><td style="width: 25%;"><a href="wb_workbook.html">wb_workbook</a></td>
+<td>Create a new Workbook object</td></tr>
+<tr><td style="width: 25%;"><a href="write_xlsx.html">write_xlsx</a></td>
+<td>Write data to an xlsx file</td></tr>
+</table>
+
+<h2><a id="X">-- X --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="xl_open.html">xl_open</a></td>
+<td>Open an xlsx file or a 'wbWorkbook' object</td></tr>
+<tr><td style="width: 25%;"><a href="xl_open.html">xl_open.default</a></td>
+<td>Open an xlsx file or a 'wbWorkbook' object</td></tr>
+<tr><td style="width: 25%;"><a href="xl_open.html">xl_open.wbWorkbook</a></td>
+<td>Open an xlsx file or a 'wbWorkbook' object</td></tr>
+<tr><td style="width: 25%;"><a href="xml_add_child.html">xml_add_child</a></td>
+<td>append xml child to node</td></tr>
+<tr><td style="width: 25%;"><a href="pugixml.html">xml_attr</a></td>
+<td>xml_node</td></tr>
+<tr><td style="width: 25%;"><a href="xml_attr_mod.html">xml_attr_mod</a></td>
+<td>adds or updates attribute(s) in existing xml node</td></tr>
+<tr><td style="width: 25%;"><a href="pugixml.html">xml_node</a></td>
+<td>xml_node</td></tr>
+<tr><td style="width: 25%;"><a href="xml_node_create.html">xml_node_create</a></td>
+<td>create xml_node from R objects</td></tr>
+<tr><td style="width: 25%;"><a href="pugixml.html">xml_node_name</a></td>
+<td>xml_node</td></tr>
+<tr><td style="width: 25%;"><a href="xml_rm_child.html">xml_rm_child</a></td>
+<td>remove xml child to node</td></tr>
+<tr><td style="width: 25%;"><a href="pugixml.html">xml_value</a></td>
+<td>xml_node</td></tr>
+</table>
+
+<h2><a id="misc">-- misc --</a></h2>
+
+<table style="width: 100%;">
+<tr><td style="width: 25%;"><a href="fmt_txt.html">+.fmt_txt</a></td>
+<td>format strings independent of the cell style.</td></tr>
+<tr><td style="width: 25%;"><a href="wb_data.html">[.wb_data</a></td>
+<td>Add the 'wb_data' attribute to a data frame in a worksheet</td></tr>
+</table>
+</div></body></html>

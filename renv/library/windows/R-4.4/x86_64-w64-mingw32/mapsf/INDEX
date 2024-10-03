@@ -1,0 +1,25 @@
+mapsf                   Package description
+mf_annotation           Plot an annotation
+mf_arrow                Plot a north arrow
+mf_background           Plot a background image
+mf_credits              Plot credits
+mf_distr                Plot a distribution
+mf_export               Export a map
+mf_get_breaks           Get class intervals
+mf_get_links            Get a link layer from a data.frame of links
+mf_get_mtq              Get the 'mtq' dataset
+mf_get_pal              Get color palettes
+mf_get_ratio            Get map width and height values
+mf_graticule            Plot graticules
+mf_init                 Initialize a map with a specific extent
+mf_inset_on             Plot an inset
+mf_label                Plot labels
+mf_layout               Plot a map layout
+mf_legend               Plot a legend
+mf_map                  Plot a map
+mf_raster               Plot a raster
+mf_scale                Plot a scale bar
+mf_shadow               Plot a shadow
+mf_theme                Set a theme
+mf_title                Plot a title
+mf_worldmap             Plot a point on a world map
