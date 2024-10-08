@@ -67,15 +67,15 @@ print(sessionInfo())
 # ALL DATA
 # Alex Hall prepared the GIS data for the 1990-2023 inventory.  Data are
 # presented as a single layer in Flooded_Lands_090424.gpkg
-st_layers("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg")
-#st_layers("inputData/Flooded_Lands_090424.gpkg") # Flooded_Lands_2024
+# st_layers("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg")
+st_layers("inputData/Flooded_Lands_090424.gpkg") # Flooded_Lands_2024
 # read first row
-sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
-            query="select * from \"Flooded_Lands_2024\" limit 1") %>%
-  print(n=Inf)
-# sf::st_read("inputData/Flooded_Lands_090424.gpkg", 
-#             query="select * from \"Flooded_Lands_2024\" limit 1") %>% # only first line
+# sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
+#             query="select * from \"Flooded_Lands_2024\" limit 1") %>%
 #   print(n=Inf)
+sf::st_read("inputData/Flooded_Lands_090424.gpkg",
+            query="select * from \"Flooded_Lands_2024\" limit 1") %>% # only first line
+  print(n=Inf)
 
 
 # Data were shared via OneDrive, downloaded to local clone of this 
@@ -92,10 +92,10 @@ sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 
 # READ ALL DATA-----------------------
 tic()
-fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
-                   layer = "Flooded_Lands_2024") %>%
-# fl.sf <- sf::st_read("inputData/Flooded_Lands_090424.gpkg",
+# fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 #                    layer = "Flooded_Lands_2024") %>%
+fl.sf <- sf::st_read("inputData/Flooded_Lands_090424.gpkg",
+                   layer = "Flooded_Lands_2024") %>%
   janitor::clean_names() %>%
   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
   rename(area_meters = intersect_area_meters,
@@ -161,8 +161,8 @@ format(utils::object.size(fl.sf), units = "GB") #7.4 GB
 
 # SharePoint                          
 climate <- 
-  # sf::st_read("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
-  sf::st_read("~/shared/jbeaulie/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%  
+  sf::st_read("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
+  # sf::st_read("~/shared/jbeaulie/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%  
   select(fldd_zn) %>% # pull out Flooded Lands climate zone
   rename(climate = fldd_zn) # rename
 
