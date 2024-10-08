@@ -62,7 +62,7 @@ print(sessionInfo())
 
 <!--Below we read in the layers created by Alex.  Layers are then combined into a single sf object.  A simple check shows that all rows were preserved in the merge.-->
 
-```{r, flooded_lands_data_sources, message=FALSE, warning=FALSE, results="hide", cache=TRUE}
+```{r, flooded_lands_data_sources, message=FALSE, warning=FALSE, results="hide"}
 
 # ALL DATA
 # Alex Hall prepared the GIS data for the 1990-2023 inventory.  Data are
@@ -100,12 +100,11 @@ fl.sf <- sf::st_read("inputData/Flooded_Lands_090424.gpkg",
   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
   rename(area_meters = intersect_area_meters,
          stusps = state_abr,
-         year = dam_year_completed,
          climate = fldd_zn) 
 toc() # 167 seconds on laptop
 
 # subsample for fast knitting
-fl.sf <- fl.sf %>% slice_sample(prop = 0.1)
+#fl.sf <- fl.sf %>% slice_sample(prop = 0.3)
 
 table(st_geometry_type(fl.sf)) # all MULTIPOLYGON
 
@@ -129,7 +128,35 @@ nrow(fl.sf) #6,250,008
  
 # how many have dam construction year?
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
-  summarize(dam.n = sum(!is.na(year))) #18,708
+  summarize(dam.n = sum(!is.na(dam_year_completed)), #18,708
+            sum(!is.na(dam_year_modified))) # 2,843 with dam_year_modified
+
+# convert dam_year_modified to `year`
+fl.sf <-  fl.sf %>% 
+  mutate(year = case_when(
+    # if dam_year_completed is known, then use dam_year_completed
+    !is.na(dam_year_completed) ~ dam_year_completed,
+    
+    # if dam_year_completed is not know, but dam_year_modified indicates dam was at least 20 years old
+    # in 1990 (beginning of time series), then use dam_year_modified. The result is that
+    # dam will be >20 years old throughout the time series
+    is.na(dam_year_completed) & dam_year_modified <= 1970 ~ dam_year_modified,
+    
+    # if dam_year_completed is not know, but dam_year_modified indicates the dam was modified sometime
+    # after 1970, lets set year to NA. My code will then assume the dam was built
+    # prior to 1970 and the system is > 20 years old throughout the time series.
+    # This will prevent a "new" dam from showing up in the time series based on 
+    # dam_year_modified when the dam has actually been in existence throughout the
+    # time series.
+    is.na(dam_year_completed) & dam_year_modified > 1970 ~ NA,
+    
+    # if no information, then NA
+    is.na(dam_year_completed) & is.na(dam_year_modified) ~ NA)) 
+
+# Now how many with an estimate of construction year?
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) # 18,732
+
 
 
 # Do all polygons have original area, new area, state and climate? YES!
@@ -204,7 +231,7 @@ fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
 ```
 #### <!--Omit Guam and Virgin Islands--> 
 <!--Alex included Guam and Virgin Islands, but the Excel file isn't ready to accommodate them.  Omitting for now.-->
-```{r}
+```{r, results="hide"}
 fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
 table(fl.sf$stusps) # no GU or VQ, good
 nrow(fl.sf) # 6,535,897 down to 6,535,554
@@ -302,7 +329,7 @@ fl.sf %>% st_drop_geometry() %>% summarize(year.n = sum(!is.na(year))) # up to 6
 ### <!--Define Flooded Land Type and Subtype-->
 
 <!--Per figure 7.2 in methodology, <8 ha is pond.  Canal/Ditch derived from FTYPE values.-->
-```{r}
+```{r, results="hide"}
 # Define size threshold for ponds.
 fl.sf <- fl.sf %>% mutate(subtype = case_when(ditch == "Yes" ~ "canals and ditches",
                                               area_ha_original < 8 ~ "freshwater pond",
@@ -1439,7 +1466,7 @@ gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
             locations = list(
               cells_column_labels(), 
               cells_body(
-                rows = seq(2, nrow(flrfl.ch4.2023.reservoir.state), by = 2)))) %>%
+                rows = seq(2, nrow(flrfl.ch4.2023.reservoir.state.gt), by = 2)))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), 
                              cells_column_labels())) %>%
@@ -1509,21 +1536,25 @@ EPA assumes that all features included in the NW network are subject to water-le
 
 NWI features were considered “managed” if they had a Special Modifier value indicating the presence of management activities (Figure 6-12). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see “Water Regime” in Figure 6-12). NWI features that met these criteria, were greater than 8 ha in surface area, and were not a canal/ditch (see emissions from land converted to flooded land – other constructed waterbodies) were defined as reservoirs.
 
+###### <!--FIGURE: NWI Criteria-->
+
+```{r results="hide"}
+# insert NWI table
+knitr::include_graphics("inputData/NWI_criteria.png")
+```
+
 Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed.” The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control.
 
 Surface areas for identified flooded lands were taken from the NHD, NWI or NW. If features from the NHD, NWI, or NW datasets overlapped, duplicated areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies.
 
 Reservoir age was determined by assuming the waterbody was created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series.
-```{r results="hide"}
-# insert NWI table
 
-```
 
 IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.
 
 Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau^[See https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html.]) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the inventory.
 
-The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase)` percent from 1990 to 2022 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
+The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2022 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
 ###### <!--TABLE:: National Flooded Land Area for Reservoirs-->
 ```{r}
@@ -1848,7 +1879,7 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
      ungroup %>% 
      rename(State = name), rowname_col = "State") %>%
   tab_header(title = md(
-    "Table 6-8??: CH<sub>4</sub> Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
+    "Table 6-89: CH<sub>4</sub> Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
   cols_label(ktonnes_ch4_canals_and_ditches = "Canals and Ditches",
              ktonnes_ch4_freshwater_pond	 = "Freshwater Ponds",
              ch4.total.ktonnes.y = "Total") %>%
@@ -1955,7 +1986,7 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
 **Figure 6-13: 2023 CH4 Emissions from A) Ditches and Canals and B) Freshwater Ponds in Flooded Land Remaining Flooded Land (kt CH4)**
 ```{r, results="hide"}
 # 1.  CALCULATE TOTAL OCWB CH4 EMISSIONS BY SUBTYPE AND STATE FOR 2023------------------
-flrfl.ch4.2023.ocwb.state # all emissions in kt ch4 year, see above
+flrfl.ch4.2023.ocwb.state.gt # all emissions in kt ch4 year, see above
 
 
 # 2. DEFINE COLORS FOR CHLOROPETH MAP-----------------
@@ -1966,8 +1997,8 @@ flrfl.ch4.2023.ocwb.state # all emissions in kt ch4 year, see above
 pal.blues <- scales::gradient_n_pal(colours = c("#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"))
 
 # calculate color code for each emission value by subtype.
-color.ditch <- data.frame(color.ditch = pal.blues(scales::rescale(flrfl.ch4.2023.ocwb.state$ktonnes_ch4_canals_and_ditches)))
-color.pond <- data.frame(color.pond = pal.blues(scales::rescale(flrfl.ch4.2023.ocwb.state$ktonnes_ch4_freshwater_pond)))
+color.ditch <- data.frame(color.ditch = pal.blues(scales::rescale(flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_canals_and_ditches)))
+color.pond <- data.frame(color.pond = pal.blues(scales::rescale(flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_freshwater_pond)))
 
 # should be able to calculate color code as below, but gives same color for each emission value???
 # flrfl.ch4.2021.ocwb.state <- flrfl.ch4.2021.ocwb.state %>%
@@ -1975,33 +2006,33 @@ color.pond <- data.frame(color.pond = pal.blues(scales::rescale(flrfl.ch4.2023.o
 #          pond.scale = scales::rescale(ktonnes_ch4_freshwater_pond)) 
 
 # add color codes to data object
-flrfl.ch4.2023.ocwb.state <- bind_cols(flrfl.ch4.2023.ocwb.state, color.ditch, color.pond)
+flrfl.ch4.2023.ocwb.state.gt <- bind_cols(flrfl.ch4.2023.ocwb.state.gt, color.ditch, color.pond)
 
 # add emissions and color data to object
-us.plot.flrfl.ch4.2023.ocwb.state <- merge(us, flrfl.ch4.2023.ocwb.state)
+us.plot.flrfl.ch4.2023.ocwb.state.gt <- merge(us, flrfl.ch4.2023.ocwb.state.gt)
 
 # preview colors
-us.plot.flrfl.ch4.2023.ocwb.state
+us.plot.flrfl.ch4.2023.ocwb.state.gt
 
 
 # 3. BREAK GEOGRAPHIES--------------
 # CONUS
-conus <- us.plot.flrfl.ch4.2023.ocwb.state %>% # state + CH4
+conus <- us.plot.flrfl.ch4.2023.ocwb.state.gt %>% # state + CH4
   filter(!name %in% c("Puerto Rico","Alaska","Hawaii"))%>%
   st_transform(5070)
 
 # Alaska
-alaska <- us.plot.flrfl.ch4.2023.ocwb.state %>%
+alaska <- us.plot.flrfl.ch4.2023.ocwb.state.gt %>%
   filter(name == "Alaska")%>%
   st_transform(3467)
 
 # Hawaii
-hawaii <- us.plot.flrfl.ch4.2023.ocwb.state %>%
+hawaii <- us.plot.flrfl.ch4.2023.ocwb.state.gt %>%
   filter(name == "Hawaii")%>%
   st_transform(crs = 32604)
 
 # Puerto Rico
-pr <- us.plot.flrfl.ch4.2023.ocwb.state %>%
+pr <- us.plot.flrfl.ch4.2023.ocwb.state.gt %>%
   filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619)
 
@@ -2117,7 +2148,7 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
-val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state$ktonnes_ch4_canals_and_ditches), -1), by = 1)
+val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_canals_and_ditches), -1), by = 1)
 pal.legend <- scales::rescale(val.legend)
 
 mf_legend(type = "choro", pos = "left",
@@ -2375,7 +2406,7 @@ validation.gt <- tribble(~Prediction, ~`Ditch/Canal`, ~`Not Ditch/Canal`,
     # Create GT table of data
 gt(validation.gt) %>%
   tab_header(title = md(
-    "Table 6-91: Predictors used in Decision Tree to Identify Canal/Ditches")) %>%
+    "Table 6-92: Predictors used in Decision Tree to Identify Canal/Ditches")) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -4123,11 +4154,10 @@ IPCC (2019) describes ponds as waterbodies that are “…constructed by excavat
 Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In 2022, states in the Great Plains region generally had the greatest CO2 and CH4 emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the second greatest emissions of all states, partly due to the relatively high CO2 emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).  
 
 ### <!--TABLE:: National level CH4 and CO2 flux table-->
-<!--National level GHG flux tables are reported for CH4 in MMT CO2-eq and kt CH4. CO2 emissions are reported as MMT CO2 and MMT C. All tables are rendered below and the 'tables' tab of Excel file.  Compare R and Excel calculations as a QA/QC check.
+<!--National level GHG flux tables are reported for CH4 in MMT CO2-eq and kt CH4. CO2 emissions are reported as MMT CO2 and MMT C. All tables are rendered below and the 'tables' tab of Excel file.  Compare R and Excel calculations as a QA/QC check.-->
 
-##CURRENTLY NO WATERBODIES IN THIS GROUP.  MAKE SOMETHING UP TO POPULATE TABLES-->
 
-```{r, eval=FALSE}
+```{r}
 # LCFL-other constructed waterbodies total GHG emissions table National
 
 # CH4: MMT CO2-eq
@@ -4371,7 +4401,6 @@ to Flooded Land in 2023 (MT **CO<sub>2<sub>** Eq.)")) %>%
 
 
 ### <!--FIGURE 6-21:: Emissions by state-->
-These figures need to be coerced into a 2-column by 1-row image. 
 
 **Figure 6-21: 2023 A) CH4 and B) CO2 Emissions from Other Constructed Waterbodies (Freshwater Ponds) in Land Converted to Flooded Land (MT CO2 Eq.)**
 ```{r, results="hide"}
@@ -4677,7 +4706,7 @@ dev.off()
 
 ```{r}
 # Load figure and render in markdown
-knitr::include_graphics(c("output/figures/LCFL.ocwb.2022.Tch4.svg", "output/figures/LCFL.ocwb.2022.co2.svg"))
+knitr::include_graphics(c("output/figures/LCFL.ocwb.2023.Tch4.svg", "output/figures/LCFL.ocwb.2023.co2.svg"))
 
 ```
 
