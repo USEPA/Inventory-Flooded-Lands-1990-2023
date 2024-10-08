@@ -100,7 +100,6 @@ fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
   rename(area_meters = intersect_area_meters,
          stusps = state_abr,
-         year = dam_year_completed,
          climate = fldd_zn) 
 toc() # 167 seconds on laptop
 
@@ -129,7 +128,35 @@ nrow(fl.sf) #6,250,008
  
 # how many have dam construction year?
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
-  summarize(dam.n = sum(!is.na(year))) #18,708
+  summarize(dam.n = sum(!is.na(dam_year_completed)), #18,708
+            sum(!is.na(dam_year_modified))) # 2,843 with dam_year_modified
+
+# convert dam_year_modified to `year`
+fl.sf <-  fl.sf %>% 
+  mutate(year = case_when(
+    # if dam_year_completed is known, then use dam_year_completed
+    !is.na(dam_year_completed) ~ dam_year_completed,
+    
+    # if dam_year_completed is not know, but dam_year_modified indicates dam was at least 20 years old
+    # in 1990 (beginning of time series), then use dam_year_modified. The result is that
+    # dam will be >20 years old throughout the time series
+    is.na(dam_year_completed) & dam_year_modified <= 1970 ~ dam_year_modified,
+    
+    # if dam_year_completed is not know, but dam_year_modified indicates the dam was modified sometime
+    # after 1970, lets set year to NA. My code will then assume the dam was built
+    # prior to 1970 and the system is > 20 years old throughout the time series.
+    # This will prevent a "new" dam from showing up in the time series based on 
+    # dam_year_modified when the dam has actually been in existence throughout the
+    # time series.
+    is.na(dam_year_completed) & dam_year_modified > 1970 ~ NA,
+    
+    # if no information, then NA
+    is.na(dam_year_completed) & is.na(dam_year_modified) ~ NA)) 
+
+# Now how many with an estimate of construction year?
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) # 18,732
+
 
 
 # Do all polygons have original area, new area, state and climate? YES!
