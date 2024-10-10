@@ -841,7 +841,7 @@ Reservoirs are designed to store water for a wide range of purposes including hy
 
 ### <!--FIGURE: Climate zone and Flooded lands map-->
 **Figure 6-10: U.S. Reservoirs (black polygons) in the Flooded Land Remaining Flooded Land Category in 2022**
-```{r, results="hide"}
+```{r, results="hide", fig.cap='Note: Colors represent climate zone used to derive IPCC default emission factors.'}
 
 # MAPSF APPROACH------------------
 # load the map
@@ -1129,6 +1129,7 @@ gt(flrfl.ch4.national.subtype.co2.gt,
   tab_stubhead(label = "Source") %>%
   opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1144,7 +1145,16 @@ gt(flrfl.ch4.national.subtype.co2.gt,
     grand_summary_row.background.color = "gray") %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
@@ -1192,6 +1202,7 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
   # opt_row_striping() %>%
   opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1206,7 +1217,16 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
@@ -1449,9 +1469,9 @@ flrfl.ch4.2023.reservoir.state.gt <-
 gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
   tab_header(title = md( "Table 6-82: Surface and Downstream CH<sub>4</sub> Emissions from Reservoirs in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
   cols_label(name = "State", 
-             ch4.surface.ktonnes.y = "Surface", 
-             ch4.dn.ktonnes.y = "Downstream", 
-             ch4.total.ktonnes.y = "Total") %>%
+             ch4.surface.ktonnes.y = "Surface Emissions", 
+             ch4.dn.ktonnes.y = "Downstream Emissions", 
+             ch4.total.ktonnes.y = "Total Emissions") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.49999, small_pattern = "+") %>%
   sub_zero(zero_text = "+") %>%
@@ -1507,7 +1527,7 @@ gt(ef.gt) %>%
     "Table 6-83: IPCC (2019) Default CH<sub>4</sub> Emission Factors for Surface Emission from Reservoirs in Flooded Land Remaining Flooded Land")) %>%
   cols_label(
     climate = "Climate",
-    ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})") %>%
+    ch4.tonnes.ha.y = md("Surface emission factor (Mt CH<sub>4</sub> ha<sup>1</sup> y<sup>1</sup>)")) %>%
   fmt_number(decimals = 4) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1515,6 +1535,14 @@ gt(ef.gt) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -1538,7 +1566,7 @@ NWI features were considered “managed” if they had a Special Modifier value 
 
 ###### <!--FIGURE: NWI Criteria-->
 
-```{r results="hide"}
+```{r}
 # insert NWI table
 knitr::include_graphics("inputData/NWI_criteria.png")
 ```
@@ -1632,12 +1660,18 @@ gt(flrfl.area.reservoir.state.gt %>%
     column_labels.border.bottom.width = 3, 
     row.striping.include_table_body = TRUE,
     row.striping.background_color = "lightgray") %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), 
+            locations = list(cells_title(), cells_grand_summary(), 
+                             cells_stub_grand_summary(),
                              cells_column_labels())) %>%
     tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
-              cells_column_labels(), cells_stubhead(), 
+              cells_column_labels(), cells_stubhead(), cells_grand_summary(), 
+              cells_stub_grand_summary(),
               cells_stub(
                 rows = seq(2, nrow(flrfl.area.reservoir.state.gt), by = 2)),
               cells_body(
@@ -1645,6 +1679,7 @@ gt(flrfl.area.reservoir.state.gt %>%
   tab_style(style = cell_borders(sides = "right", 
                                  color = "dimgray", weight = px(8)),
             locations = list(cells_body(columns = c('1990', '2005')),
+                             cells_grand_summary(columns = c('1990', '2005')), 
                              cells_column_labels(columns = c('1990', '2005')))) %>%
   tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
   tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
@@ -1733,12 +1768,21 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   # Replace NAs with zeros
   rows_add(Activity = "Other Constructed Waterbodies", .before = 1,
            !starts_with("A") ~ 0) %>%
-  tab_stubhead(label = "Activity") %>%
+  tab_stubhead(label = "Source") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "canals",
+    replacement = "Canals") %>%
+    text_replace(
+    locations = cells_stub(),
+    pattern = "ditches",
+    replacement = "Ditches") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black", 
@@ -1752,6 +1796,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -1802,6 +1847,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_stubhead(label = "Activity") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
@@ -1818,6 +1864,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -1903,7 +1950,8 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
     fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), cells_stubhead(),
+            locations = list(cells_title(), cells_stubhead(), 
+                             cells_grand_summary(), cells_stub_grand_summary(),
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
@@ -2297,10 +2345,15 @@ dev.off()
 
 ```
 
-```{r}
+```{r, echo=FALSE, results='asis'}
 
-# Load and render figure in markdown
-knitr::include_graphics(c("output/figures/FLRFL.ocwb.pond.2023.Tch4.svg", "output/figures/FLRFL.ocwb.ditch.2023.Tch4.svg"))
+# Load and render figure in markdown, side by side
+
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/FLRFL.ocwb.pond.2023.Tch4.svg) | ![](output/figures/FLRFL.ocwb.ditch.2023.Tch4.svg) |
+')
 
 ```
 
@@ -2326,7 +2379,7 @@ gt(ef.gt.2) %>%
   cols_label(
     subtype = "Other Constructed Waterbody",
     ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})") %>%
-  fmt_number(decimals = 4) %>%
+  fmt_number(decimals = 3) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -2855,9 +2908,15 @@ dev.off()
 ```
 
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/FLRFL.ocwb.pond.2023.area.svg", "output/figures/FLRFL.ocwb.ditch.2023.area.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/FLRFL.ocwb.pond.2023.area.svg) | ![](output/figures/FLRFL.ocwb.ditch.2023.area.svg) |
+')
+
 ```
 
 ###### <!--TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals/ditches by State: abbreviated time series-->
@@ -3325,9 +3384,9 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
   tab_header(title = md(
     "Table 6-101: CH<sub>4</sub> Emissions from Land Converted to Flooded Land—Reservoirs (MMT CO<sub>2</sub> Eq.)")) %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number (decimals = 0) %>%
-  # sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
-  # sub_zero(zero_text = "+") %>%
+  fmt_number (decimals = 1) %>%
+  sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
+  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -3335,6 +3394,10 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -3342,7 +3405,9 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
                 rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.1), by = 2)))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), 
-                             cells_column_labels()))
+                             cells_column_labels())) %>% 
+  tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
+  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
 
 # CH4: kt CH4
 lcfl.ghg.national.subtype.gt.2 <- lcfl.ghg.national.subtype %>% 
@@ -3355,9 +3420,9 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
   tab_header(title = md(
     "Table 6-102: CH<sub>4</sub> Emissions from Land Converted to Flooded Land—Reservoirs (kt CH<sub>4</sub>)")) %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number (decimals = 0) %>%
-  # sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
-  # sub_zero(zero_text = "+") %>%
+  fmt_number (decimals = 1) %>%
+  sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
+  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -3365,6 +3430,10 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -3372,7 +3441,9 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
                 rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.2), by = 2)))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), 
-                             cells_column_labels())) 
+                             cells_column_labels())) %>%
+    tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
+  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
 
 
 # CO2: MMT CO2
@@ -3737,9 +3808,15 @@ dev.off()
 
 ```
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/LCFL.reservoir.2023.co2.svg", "output/figures/LCFL.reservoir.2023.Tch4.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/LCFL.reservoir.2023.Tch4.svg) | ![](output/figures/LCFL.reservoir.2023.co2.svg) |
+')
 
 ```
 
@@ -3784,7 +3861,7 @@ gt(lcfl.res.ghg.by.state.gt %>%
      select(State = name, contains("ktonnes")), 
    rowname_col = "State") %>%
   tab_header(title = md(
-    "Table 6-105: Methane and **CO<sub>2<sub>** Emissions from Reservoirs in Land Converted to Flooded Land in 2023 (kt **CH<sub>4<sub>**; kt **CO<sub>2<sub>**)")) %>%
+    "Table 6-105: Methane and CO<sub>2</sub> Emissions from Reservoirs in Land Converted to Flooded Land in 2023 (kt CH<sub>4</sub>; kt CO<sub>2</sub>)")) %>%
   cols_label(ch4.surface.ktonnes.y = "Surface",
     ch4.dn.ktonnes.y = "Downstream",
  	  ch4.total.ktonnes.y = "Total", 
@@ -4356,12 +4433,12 @@ gt(lcfl.ocwb.ghg.state.2023  %>%
      rename_with(~str_extract(., "\\d+"), starts_with("area")),
    rowname_col = "State") %>%
   tab_header(title = md(
-    "Table 6-114: **CH<sub>4<sub>** and **CO<sub>2<sub>** Emissions from Other Constructed Waterbodies in Land Converted
-to Flooded Land in 2023 (MT **CO<sub>2<sub>** Eq.)")) %>%
+    "Table 6-114: CH<sub>4</sub> and CO<sub>2</sub> Emissions from Other Constructed Waterbodies in Land Converted
+to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
   tab_stubhead(label = "State") %>%
   cols_label(
-    `ch4.total.tonnes.co2.eq.y_freshwater pond` = md("**CH<sub>4<sub>**"),
-    `co2.tonnes.y_freshwater pond` = md("**CO<sub>2<sub>**"), 
+    `ch4.total.tonnes.co2.eq.y_freshwater pond` = md("CH<sub>4</sub>"),
+    `co2.tonnes.y_freshwater pond` = md("CO<sub>2</sub>"), 
     total = "Total") %>%
   opt_row_striping() %>%
   sub_missing(missing_text = " ") %>%
@@ -4704,9 +4781,14 @@ dev.off()
 
 ```
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/LCFL.ocwb.2023.Tch4.svg", "output/figures/LCFL.ocwb.2023.co2.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/LCFL.ocwb.2023.Tch4.svg) | ![](output/figures/LCFL.ocwb.2023.co2.svg) |
+')
 
 ```
 
