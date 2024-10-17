@@ -512,7 +512,7 @@ map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
 ### <!--Define distributions for EFs-->
 ```{r}
 # Read in raw data used to calculate Rd value used in methodology
-rd <- readxl::read_excel("inputData/ipccDegassingReview.xlsx", sheet = "summary")
+rd <- readxl::read_excel("~/shared/jbeaulie/inputData/ipccDegassingReview.xlsx", sheet = "summary")
 names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),
                  replacement = ".", x = names(rd))
 
@@ -573,7 +573,7 @@ summary(sim0.085)
 
 ```{r}
 # Read in emission factors
-ef.error <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>%
+ef.error <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
   # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI
   # of total emissions to not include the mean.  Here I'm expanding the CI
   # of the EF to force symmetry around mean.
@@ -697,7 +697,8 @@ ch4.co2.uncertainty.table <-  fl.error.sim.subtype %>% # ch4.co2.uncertainty
   summarize(across(everything(), list(min = min,
                                       max = max))) %>%
   ungroup() %>%
-  arrange(year, lu, subtype)
+  arrange(year, lu, subtype) 
+
 
 # ch4.co2 uncertainty table by type (subtypes nested in types)
 tic() # 56 minutes with 10,000 iterations
@@ -2238,6 +2239,79 @@ flrfl.area.reservoir.state.all <-
 
 Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). The CH~4~ emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO2 emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
 
+```{r}
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
+```
+
 ##### QA/QC and Verification
 The National Hydrography Data (NHD) is managed by the USGS in collaboration with many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
 
@@ -3613,7 +3687,77 @@ Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (
 ```{r}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
+
 
 ### QA/QC and Verification
 The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.^[CITATION NEEDED]. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
@@ -4708,6 +4852,77 @@ Uncertainty in estimates of CH4 and CO2 emissions from reservoirs on land conver
 #### <!--TABLE:: uncertainty-->
 ```{r}
 # need to add this table. It is currently rendered below
+
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
 
 ### QA/QC and Verification
@@ -5728,6 +5943,76 @@ Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flo
 #### <!--TABLE:: Uncertainty-->
 ```{r}
 # need to add this table. It is currently rendered below
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
 
 ### QA/QC and Verification
