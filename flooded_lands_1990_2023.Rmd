@@ -460,7 +460,7 @@ fl
 ```{r, results="hide"}
 # Read in emission factors
 #ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
-ef <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>%
+ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
   select(subtype, lu, climate, co2.tonnes.ha.y, ch4.tonnes.ha.y)
 
 # record nrow of fl list prior to merge.  Should be identical after merge.
@@ -506,6 +506,529 @@ toc()
 
 map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
 ```
+
+# <!--Uncertainty analysis-->
+
+### <!--Define distributions for EFs-->
+```{r}
+# Read in raw data used to calculate Rd value used in methodology
+rd <- readxl::read_excel("~/shared/jbeaulie/inputData/ipccDegassingReview.xlsx", sheet = "summary")
+names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),
+                 replacement = ".", x = names(rd))
+
+# Filter out observations from Maeck et al. 2013.  These contain some outliers
+# and are lock and dam systems, not reflective of most reservoir surfaces.
+rd.no.maeck <- filter(rd, !grepl(pattern = "Maeck", x = rd$citation))
+
+# visualize distribution
+fitdistrplus::plotdist(rd.no.maeck$Rd) # appears somewhat log-normal
+fitdistrplus::descdist(rd.no.maeck$Rd, boot = 1000) # suggest beta, but this requires value 0-1
+
+# Attempted to fit beta, lnorm, weibull, and gamma distributions, but all failed,
+# likely due to zeroes in data.  Add small positive number and retry
+rd <- rd.no.maeck %>%
+  mutate(Rd = replace(Rd, Rd == 0, 0.00001))
+# descdist(rd$Rd, boot = 1000) # suggest beta
+# fitdist(rd$Rd, "beta") # beta requires values 0-1
+flnorm <- fitdist(rd$Rd, "lnorm") # this seems to work
+# denscomp(flnorm) # bad fit
+# qqcomp(flnorm) # bad fit
+# cdfcomp(flnorm) # not bad
+# ppcomp(flnorm) # not bad
+
+# Generate simulated data using fitted distribution and compare to original data
+simData <- rlnorm(100, meanlog = flnorm$estimate[[1]], sdlog = flnorm$estimate[[2]])
+data <- data.frame(rd = c(rd$Rd, simData), source = c(rep("ipcc", length(rd$Rd)), rep("sim", 100)))
+# the fit looks OK.
+ggplot(data, aes(x=rd, color = source)) +
+  geom_histogram()
+# but when used in uncertainty simulation generates much too large numbers.
+# how about triangle distribution as discussed in IPCC 2006 CH.3
+triangle::rtriangle(n = 100, a = 0.05, b = 0.22, c = 0.09)# 2019, table 7.1
+## view the distribution
+tri <- rtriangle(n = 10000, a = 0.05, b = 0.22, c = 0.09)
+hist(tri, breaks=100, main="Triangle Distribution", xlab="x")
+# triangle distribution also generates far too large numbers in simulation
+
+# How about truncated log normal?
+EnvStats::rlnormTrunc(100,
+                      meanlog = flnorm[1]$estimate[[1]],
+                      sdlog = flnorm[1]$estimate[[2]],
+                      min = 0.05, max = 0.22) %>% summary()
+# still too big.
+# can I define a log-normal distribution that approximates what is reported in
+# IPCC 2019 Table 7.10?  After trying all these variations, sim0.085 was the
+# only one that produced a confidence interval containing the mean.
+sim1.3 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.3))
+sim1.4 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.4))
+sim1.5 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.5))
+sim1.6 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.6))
+sim0.085 <- rlnorm(100, meanlog = log(0.085), sdlog = log(1.5))
+summary(sim1.3);summary(sim1.4);summary(sim1.5);summary(sim1.6)
+summary(sim0.085)
+
+```
+
+### <!--Simulations-->
+
+```{r}
+# Read in emission factors
+ef.error <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
+  # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI
+  # of total emissions to not include the mean.  Here I'm expanding the CI
+  # of the EF to force symmetry around mean.
+  # Calculating CH4 emission factor standard deviation from 95% CI and n reported in guidance.
+  # This will allow parameter distribution to be defined using rnorm, the preferred IPCC method.
+  # No N reported for CO2, so using uniform distribution.
+  # https://stats.stackexchange.com/questions/30402/how-to-calculate-mean-and-standard-deviation-in-r-given-confidence-interval-and
+  mutate(ch4.tonnes.ha.y.upr = replace(ch4.tonnes.ha.y.upr,
+                                       subtype == "freshwater pond",
+                                       0.248),
+         ch4.sd = ((ch4.tonnes.ha.y.upr - ch4.tonnes.ha.y)/sqrt(n.ch4)) * 1.96)
+
+# put 1990 and 2022 data into a list to utilize 1990 - 2020 code
+fl <- list("1990" = fl.e$`1990` %>%
+             select(type, subtype, climate, area_ha_new, lu, age) %>%
+             mutate(calc_year = 1990),
+           "2022" = fl.e$`2022` %>%
+             select(type, subtype, climate, area_ha_new, lu, age) %>%
+             mutate(calc_year = 2022)) %>%
+  map(., ~ filter(.x, age > 0 | is.na(age)))
+
+
+# record nrow of fl list prior to merge.  Should be identical after merge.
+n.row.prior <- lapply(fl[c("1990", "2022")], nrow) #6,532,206 and 6,535,552
+
+# Merge emission factors with 1990 and 2022 area inventory.
+tic() # 4 minutes with merge, 1.7 seconds with left join!
+fl <- lapply(fl[c("1990", "2022")], function(x) {  # first and last year
+  left_join(x, ef.error)})
+toc()
+
+# Make sure no records were lost during merge
+# LOOKS GOOD
+unlist(n.row.prior) == unlist(lapply(fl, nrow))
+
+# Calculate emissions i times and aggregate by subtype and type
+fl.error.sim.subtype <- list()
+fl.error.sim.type <- list()
+set.seed(3452) # make it reproducible
+
+tic() # map: 85 seconds for 10 simulations, 1000 = 142 minutes, 10,000 = 23 hours, much longer with future_map
+for (i in 1:100) { #
+  print(i)
+  fl.error.sim.i <- map(fl, function(x) { x %>%
+      mutate(co2.tonnes.ha.y = runif(nrow(x), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr),
+             ch4.tonnes.ha.y = rnorm(nrow(x), mean = ch4.tonnes.ha.y, sd = ch4.sd),
+             # using rlnorm for downstream, see above.  mean of 0.085 needed to get lower
+             # confidence interval less than mean estimate.  true mean is 0.09
+             dn.ef = rlnorm(nrow(x), meanlog = log(0.085), sdlog = log(1.5)),
+             area_ha_new = runif(nrow(x), #15% error in area
+                                 min = area_ha_new - (area_ha_new*0.15),
+                                 max = area_ha_new + (area_ha_new*0.15)),
+             co2.tonnes.y = area_ha_new * co2.tonnes.ha.y,
+             ch4.surface.tonnes.y = area_ha_new * ch4.tonnes.ha.y,
+             ch4.dn.tonnes.y = ifelse(type == "other constructed waterbodies", # no DN for 'other'
+                                      0,
+                                      ch4.surface.tonnes.y * dn.ef),
+             ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y)
+  })
+
+
+  # Aggregate by subtype
+  fl.error.sim.subtype[[i]] <- map(fl.error.sim.i, function(x) { x %>%
+      # Sum emissions for each iteration of simulation.  Only keep summed data.  This reduces memory demands.
+      group_by(lu, subtype) %>%
+      summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4
+                ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4
+                ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28, # total CH4
+                co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2
+                year = unique(calc_year)) %>%
+      mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)
+  })
+
+  # Aggregate by type
+  fl.error.sim.type[[i]] <- map(fl.error.sim.i, function(x) {x %>%
+      mutate(type = case_when(subtype == "inundation area" ~ "reservoir", # combine for total row
+                              subtype %in% c("canals and ditches", "freshwater pond") ~ "other constructed waterbodies",
+                              TRUE ~ subtype)) %>%
+      group_by(lu, type) %>%
+      summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4
+                ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4
+                ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = T)/1000000)*28, # total CH4
+                co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2
+                year = unique(calc_year)) %>%
+      mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)
+  })
+}
+toc()
+
+
+# Warning message:
+# Problem with `mutate()` column `co2.tonnes.ha.y`.
+# i `co2.tonnes.ha.y = runif(nrow(fl.error), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr)`.
+# i NAs produced
+# expected because ef.error contains NA values for co2.tonnes.ha.y.lwr and co2.tonnes.ha.y.upr
+
+# Each iteration of the loop above creates a list of two elements (one for each year).
+# This list gets assigned to one element of fl.error.sim, thus fl.error.sim has lists
+# nested within a list.  flatten() unnests the lists
+length(fl.error.sim.subtype) # 10000 elements
+fl.error.sim.subtype <- flatten(fl.error.sim.subtype)
+length(fl.error.sim.subtype) # 20000 elements
+
+length(fl.error.sim.type) # 10,000 elements
+fl.error.sim.type <- flatten(fl.error.sim.type)
+length(fl.error.sim.type) # 20,000 elements
+
+
+```
+
+
+### <!--Table:: Uncertainty-->
+```{r}
+
+
+# STEP 1: COLLAPSE LIST INTO DF
+# ch4.co2 uncertainty table by subtype.  ~8 minutes on memory intensive DMAP
+ch4.co2.uncertainty.table <-  fl.error.sim.subtype %>% # ch4.co2.uncertainty
+  reduce(bind_rows) %>% # collapse all elements of list into single df.
+  group_by(lu, subtype, year) %>% # group by subtype
+  summarize(across(everything(), list(min = min,
+                                      max = max))) %>%
+  ungroup() %>%
+  arrange(year, lu, subtype) 
+
+
+# ch4.co2 uncertainty table by type (subtypes nested in types)
+tic() # 56 minutes with 10,000 iterations
+ch4.co2.uncertainty.table.total <- fl.error.sim.type %>%
+  reduce(full_join) %>% # merge all elements of list into single df. could use bind rows
+  group_by(lu, type, year) %>% # group by type
+  summarize(across(everything(), list(min = min,
+                                      max = max))) %>%
+  ungroup() %>%
+  arrange(year, lu, type)
+toc()
+
+# STEP 2:  CALCULATE MEAN EMISSIONS TO COMBINE WITH UNCERTAINTY ESTIMATES
+# Bring in mean flux estimates for 1990 and 2022.  Reported in `Table::FLRFL-reservoirs CH4
+# emissions by mechanism (dn, surface), type (inundation, reservoir), and state' above,
+# but recalculated here to merge with uncertainty results.
+
+# List with emissions from 1990 and 2022.  Assume these are "mean" values
+fl.for.mean <- list("1990" = fl.e$`1990` %>%
+                      select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y")),
+
+                    "2022" = fl.e$`2022` %>%
+                      select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y"))) %>%
+  map(., ~ filter(.x, age > 0 | is.na(age)))
+
+
+# ch4.co2 mean fluxes by subtype
+ch4.co2.mean.table <- fl.for.mean %>%  # first and last year
+  lapply(., function(x) {
+    x %>%
+      select(lu, subtype, ch4.surface.tonnes.y, ch4.dn.tonnes.y,
+             ch4.total.tonnes.y, co2.tonnes.y) %>%
+      group_by(lu, subtype) %>% # subtype
+      summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y, na.rm = TRUE)/1000000)*28,
+                ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28,
+                ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28,
+                co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000,
+                ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)
+  }) %>%
+  purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element
+  map_dfr(., bind_rows) %>% # collapse into DF
+  ungroup() # to be safe
+
+
+
+
+# ch4.co2 mean fluxes total!
+ch4.co2.mean.table.total <- fl.for.mean %>%  # first and last year
+  lapply(., function(x) {
+    x %>%
+      select(lu, type, ch4.surface.tonnes.y, ch4.dn.tonnes.y,
+             ch4.total.tonnes.y, co2.tonnes.y) %>%
+      group_by(lu, type) %>% # type
+      summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y)/1000000)*28,
+                ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y)/1000000)*28,
+                ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y)/1000000)*28,
+                co2.mmt.co2.eq.y = sum(co2.tonnes.y)/1000000,
+                ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)
+  }) %>%
+  purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element
+  map_dfr(., bind_rows) %>% # collapse into DF
+  ungroup()  # to be safe
+
+
+# STEP 3: COMBINE MEAN AND UNCERTAINTY ESTIMATES
+bound.perc = function(x,y){((x - y)/y) *100} # function for required fields
+
+ch4.co2.uncertainty.mean.table <- merge(ch4.co2.uncertainty.table, ch4.co2.mean.table) %>%
+  mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,
+                                           ch4.surface.mmt.co2.eq.y),
+         lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,
+                                           ch4.surface.mmt.co2.eq.y),
+         upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,
+                                      ch4.dn.mmt.co2.eq.y),
+         lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,
+                                      ch4.dn.mmt.co2.eq.y),
+         upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,
+                                         ch4.total.mmt.co2.eq.y),
+         lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,
+                                         ch4.total.mmt.co2.eq.y),
+         upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,
+                                   co2.mmt.co2.eq.y),
+         lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,
+                                   co2.mmt.co2.eq.y),
+         upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max,
+                                         ghg.total.mmt.co2.eq.y),
+         lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min,
+                                         ghg.total.mmt.co2.eq.y)) %>%
+  relocate(lu, subtype, year, contains("surface"), contains("dn"), contains("total"))
+
+
+ch4.co2.uncertainty.mean.table.total <- merge(ch4.co2.uncertainty.table.total, ch4.co2.mean.table.total) %>%
+  mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,
+                                           ch4.surface.mmt.co2.eq.y),
+         lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,
+                                           ch4.surface.mmt.co2.eq.y),
+         upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,
+                                      ch4.dn.mmt.co2.eq.y),
+         lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,
+                                      ch4.dn.mmt.co2.eq.y),
+         upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,
+                                         ch4.total.mmt.co2.eq.y),
+         lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,
+                                         ch4.total.mmt.co2.eq.y),
+         upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,
+                                   co2.mmt.co2.eq.y),
+         lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,
+                                   co2.mmt.co2.eq.y),
+         upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max,
+                                         ghg.total.mmt.co2.eq.y),
+         lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min,
+                                         ghg.total.mmt.co2.eq.y)) %>%
+  relocate(lu, type, year, contains("surface"), contains("dn"), contains("total"))
+
+
+###FLRFL TABLE
+# STEP 4: REPORT FOR RESERVOIR TABLE
+# Reservoir part of table
+ch4.co2.uncertainty.mean.table %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>% # also included in list element name
+      filter(lu == "Flooded Land Remaining Flooded Land",
+             subtype == "reservoir") %>%
+      pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>%
+      mutate(surf.dn.tot = ifelse(grepl("surface", flux.name),
+                                  "surface",
+                                  ifelse(grepl("dn", flux.name),
+                                         "downstream",
+                                         ifelse(grepl("tot", flux.name),
+                                                "total",
+                                                ifelse(grepl("co2", flux.name), #Co2 is total, no downstream
+                                                       "total",
+                                                       "oops")))),
+             flux.name = gsub(c(".surface|.dn|.total"), "", flux.name)) %>%
+      pivot_wider(names_from = flux.name, values_from = flux) %>%
+      select(-contains("ghg"), -starts_with("co2"), -lwr.perc.co2, -upr.perc.co2) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL
+      filter(surf.dn.tot != "total") %>%
+      arrange(desc(subtype))
+  })
+
+#Total part of table
+ch4.co2.uncertainty.mean.table.total %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>% # also included in list element name
+      filter(lu == "Flooded Land Remaining Flooded Land",
+             type == "reservoir") %>%
+      select(lu, type, contains("total")) %>%
+      select(-contains("ghg"))
+  })
+
+
+
+# STEP 5: REPORT FOR OTHER CONSTRUCTED WATERBODIES TABLE
+# canals and ditches / freshwater pond rows
+ch4.co2.uncertainty.mean.table %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>% # also included in list element name
+      filter(lu == "Flooded Land Remaining Flooded Land",
+             subtype %in% c("canals and ditches", "freshwater pond")) %>%
+      select(subtype, contains("total")) %>%
+      select(-contains("ghg"))
+  })
+
+# total row
+ch4.co2.uncertainty.mean.table.total %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>% # also included in list element name
+      filter(lu == "Flooded Land Remaining Flooded Land",
+             type == "other constructed waterbodies") %>%
+      select(lu, type, contains("total")) %>%
+      select(-contains("ghg"))
+  })
+
+###LCFL TABLE
+# REPORT FOR RESERVOIR TABLE
+# first part of table, dissagregated values
+ch4.co2.uncertainty.mean.table %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>%
+      filter(lu == "Land Converted to Flooded Land",
+             subtype == "reservoir") %>%
+      pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>%
+      filter(!grepl("ch4.total", flux.name)) %>% # not reporting CH4 from dn + surface
+      # distinct(flux.name) %>% print(n=Inf) %>%
+      mutate(surf.dn.tot = ifelse(grepl("surface", flux.name),
+                                  "surface",
+                                  ifelse(grepl("dn", flux.name),
+                                         "downstream",
+                                         ifelse(grepl("^co2", flux.name), #starts with co2
+                                                "surface",
+                                                ifelse(grepl("ghg", flux.name),
+                                                       "total", #CH4 + CO2
+                                                       #all CO2 are surface
+                                                       ifelse(flux.name %in% c("upr.perc.co2", "lwr.perc.co2"),
+                                                              "surface",
+                                                              "oops"))))),
+             flux.name = gsub(c(".surface|.dn|.total"), "", flux.name))  %>% # simplify flux name
+      pivot_wider(names_from = flux.name, values_from = flux) %>%
+      select(-contains("ghg")) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL
+      filter(surf.dn.tot != "total") %>%
+      arrange(desc(subtype))
+  })
+
+# total part of table
+ch4.co2.uncertainty.mean.table.total %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>%
+      filter(lu == "Land Converted to Flooded Land",
+             type == "reservoir") %>% # in this object, reservoir == reservoir + inundation
+      select(lu, type, contains("ghg"))
+  })
+
+# REPORT FOR OTHER CONSTRUCTED WATERBODIES
+# by gas
+ch4.co2.uncertainty.mean.table %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>%
+      filter(lu == "Land Converted to Flooded Land",
+             subtype %in% c("freshwater pond", "canals and ditches")) %>%
+      select(lu, subtype, contains("total"), starts_with("co2"), contains("perc")) %>%
+      select(-contains("ghg")) %>%
+      mutate(across(!contains("perc") & -lu & -subtype, ~ .x * 1000)) # convert to ktonnes!!!!
+  })
+
+# total part of table
+ch4.co2.uncertainty.mean.table.total %>%
+  split(., .$year) %>% # split into list
+  lapply(., function(x) {
+    x %>%
+      select(-year) %>%
+      filter(lu == "Land Converted to Flooded Land",
+             type == "other constructed waterbodies") %>%
+      select(lu, type, contains("ghg")) %>%
+      mutate(across(!contains("perc") & -lu & -type, ~ .x * 1000)) # convert to ktonnes!!!!
+  })
+
+```
+
+### <!--Tables: A. Data-->
+<!--Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.-->
+```{r}
+# 1990 first---------------
+A.Data.1990.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "1990"] # subset all "1990" results from list
+
+names(A.Data.1990.l) <- 1:length(A.Data.1990.l) # rename each list element with element position.  Each position = 1 iteration
+
+# Add iteration number as a new column in each dataframe in list, collapse to df, format....
+A.Data.1990 <- imap(A.Data.1990.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name
+  bind_rows(.) %>%
+  select(-year, -ghg.total.mmt.co2.eq.y) %>%
+  relocate(iteration) %>%
+  ungroup()
+
+# prepare data to write to Excel
+A.Data.1990.export <- A.Data.1990 %>%
+  pivot_wider(names_from = c(lu, subtype),
+              values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y,
+                              ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>%
+  # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream)
+  # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates"
+  # Replace 0 with NE for these cases
+  mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0
+                ~replace(., . == 0, "NE"))) # replace the zeroes with NE
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = A.Data.1990.export,
+#                       sheet = "A. Data (Base Year, 1990)",
+#                       row_names = FALSE, col_names = TRUE,
+#                       start_row = 11,
+#                       start_col = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+
+# 2022---------------
+A.Data.2022.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "2022"] # subset all "2022" results from list
+
+names(A.Data.2022.l) <- 1:length(A.Data.2022.l) # rename each list element with element position.  Each position = 1 iteration
+
+# Add iteration number as a new column in each dataframe in list, collapse to df, format....
+A.Data.2022 <- imap(A.Data.2022.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name
+  bind_rows(.) %>%
+  select(-year, -ghg.total.mmt.co2.eq.y) %>%
+  relocate(iteration) %>%
+  ungroup()
+
+# prepare data to write to excel
+A.Data.2022.export <- A.Data.2022 %>%
+  pivot_wider(names_from = c(lu, subtype),
+              values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y,
+                              ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>%
+  # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream)
+  # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates"
+  # Replace 0 with NE for these cases
+  mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0
+                ~replace(., . == 0, "NE"))) # replace the zeroes with NE
+
+
+# paste into excel for formatting, then paste into Word.
+# file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx"
+# wb <- wb_load(file)
+# openxlsx2::write_data(wb,
+#                       x = A.Data.1990.export,
+#                       sheet = "A. Data (Current Year)",
+#                       row_names = FALSE, col_names = TRUE,
+#                       start_row = 11,
+#                       start_col = 2)
+# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+
+```
+
+
 
 ### <!--Aggretate as needed-->
 #### <!--Set up a few things-->
@@ -831,9 +1354,9 @@ Flooded lands are defined as water bodies where human activities have 1) caused 
 
 Flooded lands are broadly classified as “reservoirs” or “other constructed waterbodies” (IPCC 2019). Other constructed waterbodies include canals/ditches and ponds (flooded land <8 ha surface area). Reservoirs are defined as flooded land greater than 8 ha. IPCC guidance (IPCC 2019) provides default emission factors for reservoirs, ponds, and canals/ditches. 
 
-Land that has been flooded for greater than 20 years is defined as flooded land remaining flooded land and land flooded for 20 years or less is defined as land converted to flooded land. The distinction is based on literature reports that CH4 and CO2 emissions are high immediately following flooding, but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005; Barros et al. 2011; Teodoru et al. 2012). Emissions of CH4 are estimated for flooded land remaining flooded land, but CO2 emissions are not included as they are 6-126   Inventory of U.S. Greenhouse Gas Emissions and Sinks: 1990–2022 primarily the result of decomposition of organic matter entering the waterbody from the catchment or contained in inundated soils and are captured in Chapter 6, Land Use, Land-Use Change, and Forestry.  
+Land that has been flooded for greater than 20 years is defined as flooded land remaining flooded land and land flooded for 20 years or less is defined as land converted to flooded land. The distinction is based on literature reports that CH~4~ and CO~2~ emissions are high immediately following flooding, but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005; Barros et al. 2011; Teodoru et al. 2012). Emissions of CH~4~ are estimated for flooded land remaining flooded land, but CO~2~ emissions are not included as they are 6-126   Inventory of U.S. Greenhouse Gas Emissions and Sinks: 1990–2022 primarily the result of decomposition of organic matter entering the waterbody from the catchment or contained in inundated soils and are captured in Chapter 6, Land Use, Land-Use Change, and Forestry.  
 
-Nitrous oxide emissions from flooded lands are largely related to input of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting of N2O emissions which are captured in other source categories, such as indirect N2O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge). 
+Nitrous oxide emissions from flooded lands are largely related to input of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting of N~2~O emissions which are captured in other source categories, such as indirect N~2~O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge). 
 
 ## Emissions from Flooded Land Remaining Flooded Land-Reservoirs
 Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In 2022, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2022) %>% summarize(tot.area = sum(.)) %>% pull() / 1000000` million hectares of reservoirs in the flooded land remaining flooded land category.  These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)(IPCC 2019).
@@ -841,7 +1364,7 @@ Reservoirs are designed to store water for a wide range of purposes including hy
 
 ### <!--FIGURE: Climate zone and Flooded lands map-->
 **Figure 6-10: U.S. Reservoirs (black polygons) in the Flooded Land Remaining Flooded Land Category in 2022**
-```{r, results="hide"}
+```{r, results="hide", fig.cap='Note: Colors represent climate zone used to derive IPCC default emission factors.'}
 
 # MAPSF APPROACH------------------
 # load the map
@@ -1129,6 +1652,7 @@ gt(flrfl.ch4.national.subtype.co2.gt,
   tab_stubhead(label = "Source") %>%
   opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1144,7 +1668,16 @@ gt(flrfl.ch4.national.subtype.co2.gt,
     grand_summary_row.background.color = "gray") %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
@@ -1192,6 +1725,7 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
   # opt_row_striping() %>%
   opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1206,7 +1740,16 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
@@ -1449,9 +1992,9 @@ flrfl.ch4.2023.reservoir.state.gt <-
 gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
   tab_header(title = md( "Table 6-82: Surface and Downstream CH<sub>4</sub> Emissions from Reservoirs in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
   cols_label(name = "State", 
-             ch4.surface.ktonnes.y = "Surface", 
-             ch4.dn.ktonnes.y = "Downstream", 
-             ch4.total.ktonnes.y = "Total") %>%
+             ch4.surface.ktonnes.y = "Surface Emissions", 
+             ch4.dn.ktonnes.y = "Downstream Emissions", 
+             ch4.total.ktonnes.y = "Total Emissions") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.49999, small_pattern = "+") %>%
   sub_zero(zero_text = "+") %>%
@@ -1507,7 +2050,7 @@ gt(ef.gt) %>%
     "Table 6-83: IPCC (2019) Default CH<sub>4</sub> Emission Factors for Surface Emission from Reservoirs in Flooded Land Remaining Flooded Land")) %>%
   cols_label(
     climate = "Climate",
-    ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})") %>%
+    ch4.tonnes.ha.y = md("Surface emission factor (Mt CH<sub>4</sub> ha<sup>1</sup> y<sup>1</sup>)")) %>%
   fmt_number(decimals = 4) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -1515,6 +2058,14 @@ gt(ef.gt) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  # text_replace(
+  #   locations = cells_stub(),
+  #   pattern = "surface",
+  #   replacement = "Surface Emissions") %>%  
+  # text_replace(
+  #   locations = cells_stub(),
+  #   pattern = "downstream",
+  #   replacement = "Downstream Emissions") %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -1538,7 +2089,7 @@ NWI features were considered “managed” if they had a Special Modifier value 
 
 ###### <!--FIGURE: NWI Criteria-->
 
-```{r results="hide"}
+```{r}
 # insert NWI table
 knitr::include_graphics("inputData/NWI_criteria.png")
 ```
@@ -1632,12 +2183,18 @@ gt(flrfl.area.reservoir.state.gt %>%
     column_labels.border.bottom.width = 3, 
     row.striping.include_table_body = TRUE,
     row.striping.background_color = "lightgray") %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), 
+            locations = list(cells_title(), cells_grand_summary(), 
+                             cells_stub_grand_summary(),
                              cells_column_labels())) %>%
     tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
-              cells_column_labels(), cells_stubhead(), 
+              cells_column_labels(), cells_stubhead(), cells_grand_summary(), 
+              cells_stub_grand_summary(),
               cells_stub(
                 rows = seq(2, nrow(flrfl.area.reservoir.state.gt), by = 2)),
               cells_body(
@@ -1645,6 +2202,7 @@ gt(flrfl.area.reservoir.state.gt %>%
   tab_style(style = cell_borders(sides = "right", 
                                  color = "dimgray", weight = px(8)),
             locations = list(cells_body(columns = c('1990', '2005')),
+                             cells_grand_summary(columns = c('1990', '2005')), 
                              cells_column_labels(columns = c('1990', '2005')))) %>%
   tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
   tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
@@ -1678,9 +2236,81 @@ flrfl.area.reservoir.state.all <-
 
 ```
 ##### Uncertainty
-**Calculations performed at end. Move up here?**
 
-Uncertainty in estimates of CH4 emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). The CH4 emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO2 emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
+Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). The CH~4~ emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO2 emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
+
+```{r}
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
+```
 
 ##### QA/QC and Verification
 The National Hydrography Data (NHD) is managed by the USGS in collaboration with many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
@@ -1692,17 +2322,17 @@ The EPA's SDWIS is a new data source used in the current (1990 through 2022) Inv
 
 The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current Inventory contains 47 new dams and updated values for “year of dam completion” for 975 dams relative to the previous (1990 through 2021) Inventory data. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current Inventory has major updates for MS, ND, NM, and MT.
 
-The net effect of these recalculations was an average annual increase in CH4 emission estimates from reservoirs of 1.23 MMT CO2 Eq., or 4 percent, over the time series from 1990 to 2021 compared to the previous Inventory.
+The net effect of these recalculations was an average annual increase in CH~4~ emission estimates from reservoirs of 1.23 MMT CO2 Eq., or 4 percent, over the time series from 1990 to 2021 compared to the previous Inventory.
 
 ##### Planned Improvements
 The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.^[See https://www.epa.gov/air-research/research-emissions-us-reservoirs.] The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
 
 ## Emissions from Flooded Land Remaining Flooded Land-Other Constructed Waterbodies
-The IPCC (IPCC 2019) provides emission factors for several types of “other constructed waterbodies” including freshwater ponds and canals/ditches. IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” Furthermore, the IPCC “Decision tree for types of Flooded Land” (IPCC 2019, Fig. 7.2) defines a size threshold of 8 ha to distinguish reservoirs from “other constructed waterbodies.” For this Inventory, ponds are defined as managed flooded land that are 1) less than 8 ha in surface area, and 2) not categorized as canals/ditches. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH4 emissions than the latter. Activity data on pond salinity are not uniformly available for the conterminous United States and all ponds in the inventory are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are often sites of substantial CH4 emissions from anaerobic sediments.
+The IPCC (IPCC 2019) provides emission factors for several types of “other constructed waterbodies” including freshwater ponds and canals/ditches. IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” Furthermore, the IPCC “Decision tree for types of Flooded Land” (IPCC 2019, Fig. 7.2) defines a size threshold of 8 ha to distinguish reservoirs from “other constructed waterbodies.” For this Inventory, ponds are defined as managed flooded land that are 1) less than 8 ha in surface area, and 2) not categorized as canals/ditches. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH~4~ emissions than the latter. Activity data on pond salinity are not uniformly available for the conterminous United States and all ponds in the inventory are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are often sites of substantial CH~4~ emissions from anaerobic sediments.
 
 Canals and ditches (terms are used interchangeably) are linear water features constructed to transport water (i.e., stormwater drainage, aqueduct), to irrigate or drain land, to connect two or more bodies of water, or to serve as a waterway for watercraft. The geometry and construction of canals and ditches varies widely and includes narrow earthen channels (<1 m wide) and concrete lined aqueducts in excess of 50 m wide. Canals and ditches can be extensive in many agricultural, forest and settlement areas, and may also be significant sources of emissions in some circumstances.
 
-Methane emissions from freshwater ponds in flooded land remaining flooded land increased by approximately `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull()) * 100` percent from 1990 to 2022. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH4 emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
+Methane emissions from freshwater ponds in flooded land remaining flooded land increased by approximately `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull()) * 100` percent from 1990 to 2022. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
 
 
 ### <!--TABLE:: National level CH4 flux table-->
@@ -1733,12 +2363,21 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   # Replace NAs with zeros
   rows_add(Activity = "Other Constructed Waterbodies", .before = 1,
            !starts_with("A") ~ 0) %>%
-  tab_stubhead(label = "Activity") %>%
+  tab_stubhead(label = "Source") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "canals",
+    replacement = "Canals") %>%
+    text_replace(
+    locations = cells_stub(),
+    pattern = "ditches",
+    replacement = "Ditches") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black", 
@@ -1752,6 +2391,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -1802,6 +2442,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_stubhead(label = "Activity") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
+  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
@@ -1818,6 +2459,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -1903,7 +2545,8 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
     fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), cells_stubhead(),
+            locations = list(cells_title(), cells_stubhead(), 
+                             cells_grand_summary(), cells_stub_grand_summary(),
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
@@ -2049,7 +2692,7 @@ mf_theme(
 
 # 5. MAKE CANALS AND DITCHES MAP---------------
 mf_export(x = conus,
-          filename = "output/figures/FLRFL.ocwb.ditch.2023.Tch4.svg",
+          filename = "output/figures/FLRFL.ocwb.ditch.2023.Tch4.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -2175,7 +2818,7 @@ dev.off()
 ```{r, results="hide"}
 # 6. MAKE PONDS MAP-------------------------
 mf_export(x = conus,
-          filename = "output/figures/FLRFL.ocwb.pond.2023.Tch4.svg",
+          filename = "output/figures/FLRFL.ocwb.pond.2023.Tch4.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -2297,10 +2940,15 @@ dev.off()
 
 ```
 
-```{r}
+```{r, echo=FALSE, results='asis'}
 
-# Load and render figure in markdown
-knitr::include_graphics(c("output/figures/FLRFL.ocwb.pond.2023.Tch4.svg", "output/figures/FLRFL.ocwb.ditch.2023.Tch4.svg"))
+# Load and render figure in markdown, side by side
+
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/FLRFL.ocwb.pond.2023.Tch4.png){width="50%"} | ![](output/figures/FLRFL.ocwb.ditch.2023.Tch4.png){width="50%"} |
+')
 
 ```
 
@@ -2325,8 +2973,8 @@ gt(ef.gt.2) %>%
     "Table 6-90: IPCC (2019) Default CH<sub>4</sub> Emission Factors for Surface Emission from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land")) %>%
   cols_label(
     subtype = "Other Constructed Waterbody",
-    ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})") %>%
-  fmt_number(decimals = 4) %>%
+    ch4.tonnes.ha.y = "Surface emission factor (Mt CH_4 ha^-1 y^-1)") %>%
+  fmt_number(decimals = 3) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -2509,7 +3157,7 @@ Canals and ditches in the conterminous United States are most abundant in the Gu
 
 
 ###### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies: full time series-->
-This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.ocwb.area.national.
+<!--This table is similar to that above, but contains the full time series.  This was requested by John Steller on 4/29/2024.  It will be written to "inventoryReportFloodedLandArea.xlsx", sheet == FLRFL.ocwb.area.national.-->
 ```{r}
 flrfl.ocwb.area.national.all <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
@@ -2612,9 +3260,9 @@ mf_theme(
   cex = 2, font = 3)
 
 # 5. MAKE CANALS AND DITCHES MAP---------------
-# .svg vector format works, but DMAP won't render a view.  Must download to local computer, then view.
+# .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
-          filename = "output/figures/FLRFL.ocwb.ditch.2023.area.svg",
+          filename = "output/figures/FLRFL.ocwb.ditch.2023.area.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -2734,9 +3382,9 @@ dev.off()
 
 ```{r, results="hide"}
 # 6. MAKE PONDS MAP-------------------------
-# .svg vector format works, but DMAP won't render a view.  Must download to local computer, then view.
+# .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
-          filename = "output/figures/FLRFL.ocwb.pond.2023.area.svg",
+          filename = "output/figures/FLRFL.ocwb.pond.2023.area.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -2855,9 +3503,15 @@ dev.off()
 ```
 
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/FLRFL.ocwb.pond.2023.area.svg", "output/figures/FLRFL.ocwb.ditch.2023.area.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/FLRFL.ocwb.pond.2023.area.png){width="50%"} | ![](output/figures/FLRFL.ocwb.ditch.2023.area.png){width="50%"} |
+')
+
 ```
 
 ###### <!--TABLE:: Flooded Land Area for Other Constructed Waterbodies-canals/ditches by State: abbreviated time series-->
@@ -3027,13 +3681,83 @@ flrfl.pond.area.by.state.all <- fl.cl.area.state.type %>%
 ```
 
 ### Uncertainty
-Uncertainty in estimates of CH4 emissions from other constructed waterbodies (ponds, canals/ditches) in flooded land remaining flooded land (Table 6-96) are estimated using IPCC Approach 2 and include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in default emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 to 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the flooded land area estimates is assumed and is based on expert judgment.
+Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (ponds, canals/ditches) in flooded land remaining flooded land (Table 6-96) are estimated using IPCC Approach 2 and include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in default emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 to 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the flooded land area estimates is assumed and is based on expert judgment.
 
 #### <!--TABLE:: Uncertainty Estimates-->
 ```{r}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
+
 
 ### QA/QC and Verification
 The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.^[CITATION NEEDED]. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
@@ -3325,9 +4049,9 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
   tab_header(title = md(
     "Table 6-101: CH<sub>4</sub> Emissions from Land Converted to Flooded Land—Reservoirs (MMT CO<sub>2</sub> Eq.)")) %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number (decimals = 0) %>%
-  # sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
-  # sub_zero(zero_text = "+") %>%
+  fmt_number (decimals = 1) %>%
+  sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
+  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -3335,6 +4059,10 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -3342,7 +4070,9 @@ gt(lcfl.ghg.national.subtype.gt.1) %>%
                 rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.1), by = 2)))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), 
-                             cells_column_labels()))
+                             cells_column_labels())) %>% 
+  tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
+  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
 
 # CH4: kt CH4
 lcfl.ghg.national.subtype.gt.2 <- lcfl.ghg.national.subtype %>% 
@@ -3355,9 +4085,9 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
   tab_header(title = md(
     "Table 6-102: CH<sub>4</sub> Emissions from Land Converted to Flooded Land—Reservoirs (kt CH<sub>4</sub>)")) %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number (decimals = 0) %>%
-  # sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
-  # sub_zero(zero_text = "+") %>%
+  fmt_number (decimals = 1) %>%
+  sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
+  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -3365,6 +4095,10 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
     column_labels.border.bottom.style = "solid", 
     column_labels.border.bottom.color = "black", 
     column_labels.border.bottom.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), 
@@ -3372,7 +4106,9 @@ gt(lcfl.ghg.national.subtype.gt.2) %>%
                 rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.2), by = 2)))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), 
-                             cells_column_labels())) 
+                             cells_column_labels())) %>%
+    tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
+  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
 
 
 # CO2: MMT CO2
@@ -3511,7 +4247,7 @@ mf_theme(
 
 
 mf_export(x = conus,
-          filename = "output/figures/LCFL.reservoir.2023.Tch4.svg",
+          filename = "output/figures/LCFL.reservoir.2023.Tch4.png",
           width = 7, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -3624,7 +4360,7 @@ dev.off()
 # 5. MAKE CO2 MAP-------
 
 mf_export(x = conus,
-          filename = "output/figures/LCFL.reservoir.2023.co2.svg",
+          filename = "output/figures/LCFL.reservoir.2023.co2.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -3737,9 +4473,15 @@ dev.off()
 
 ```
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/LCFL.reservoir.2023.co2.svg", "output/figures/LCFL.reservoir.2023.Tch4.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/LCFL.reservoir.2023.Tch4.png){width="50%"} | ![](output/figures/LCFL.reservoir.2023.co2.png){width="50%"} |
+')
 
 ```
 
@@ -3784,7 +4526,7 @@ gt(lcfl.res.ghg.by.state.gt %>%
      select(State = name, contains("ktonnes")), 
    rowname_col = "State") %>%
   tab_header(title = md(
-    "Table 6-105: Methane and **CO<sub>2<sub>** Emissions from Reservoirs in Land Converted to Flooded Land in 2023 (kt **CH<sub>4<sub>**; kt **CO<sub>2<sub>**)")) %>%
+    "Table 6-105: Methane and CO<sub>2</sub> Emissions from Reservoirs in Land Converted to Flooded Land in 2023 (kt CH<sub>4</sub>; kt CO<sub>2</sub>)")) %>%
   cols_label(ch4.surface.ktonnes.y = "Surface",
     ch4.dn.ktonnes.y = "Downstream",
  	  ch4.total.ktonnes.y = "Total", 
@@ -3854,8 +4596,8 @@ gt(ef.gt.3) %>%
   tab_spanner(label = "Surface emission factor", columns = 2:3) %>%
   cols_label(
     climate = "Climate",
-    ch4.tonnes.ha.y = "Mt {{CH_4 ha^-1 y^-1}}",
-    co2.tonnes.ha.y = "Mt {{CO_2 ha^-1 y^-1}}") %>%
+    ch4.tonnes.ha.y = "Mt CH4 ha^-1 y^-1",
+    co2.tonnes.ha.y = "Mt CO2 ha^-1 y^-1") %>%
   fmt_number(decimals = 4) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -3967,8 +4709,8 @@ nid <- st_read("inputData/nation.gpkg", quiet = TRUE,
 
 
 # Lots of screwing around with .pgn, .tiff, ggsave, etc to get this to look good in .doc
-tiff("output/figures/newDams.tiff", res = 800, compression = "lzw", width = 4.77/1.8, height = 4.99/2, units = "in")
-
+png("output/figures/newDams.png", res = 800,  width = 5, height = 3.9, units = "in")
+ # width = 4.77/1.8, height = 4.99/2
 nid %>%
   mutate(yearCompleted = as.numeric(yearCompleted)) %>%
   filter(yearCompleted >= 1990 & yearCompleted <= 2023) %>%
@@ -3984,20 +4726,22 @@ nid %>%
         axis.text.x = element_text(angle = 90),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  xlim(1990, 2023)
+  xlim(1990, 2023) + 
+  # Add margin to center the image in docx output
+  theme(plot.margin = margin(0,0,0,1, "in"))
 
 dev.off()
 
 ```
 
-```{r}
+```{r, out.width='100%'}
 # Load and render figure in markdown
-knitr::include_graphics("output/figures/newDams.tiff")
+knitr::include_graphics("output/figures/newDams.png")
 
 ```
 
 
-##### TABLE:: Flooded Land Area for LCFL Reservoirs by State: abbreviated time series-->
+##### <!--TABLE:: Flooded Land Area for LCFL Reservoirs by State: abbreviated time series-->
 
 ```{r}
 
@@ -4108,6 +4852,77 @@ Uncertainty in estimates of CH4 and CO2 emissions from reservoirs on land conver
 #### <!--TABLE:: uncertainty-->
 ```{r}
 # need to add this table. It is currently rendered below
+
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
 
 ### QA/QC and Verification
@@ -4151,7 +4966,7 @@ Freshwater ponds are the only type of flooded lands within the “other construc
 
 IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” The IPCC “Decision tree for types of Flooded Land” (IPCC 2019, Fig. 7.2) elaborates on this description by defining waterbodies less than 8 ha as a subset of “other constructed waterbodies.” For this *Inventory*, ponds are defined as managed flooded land not identified as “canal/ditch” (see Methods below) with surface area less than 8 ha. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH4 emission rates than the latter. Activity data on pond salinity is not uniformly available for the United States and all ponds in land converted to flooded land are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are sites of substantial CH4 and CO2 emissions from anaerobic sediments.  
 
-Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In 2022, states in the Great Plains region generally had the greatest CO2 and CH4 emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the second greatest emissions of all states, partly due to the relatively high CO2 emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).  
+Methane and CO2 emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990"))) * 100` 95 and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2022") / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990"))) * 100` 96 percent, respectively, from 1990 to 2022 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In 2022, states in the Great Plains region generally had the greatest CO~2~ and CH~4~ emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the second greatest emissions of all states, partly due to the relatively high CO2 emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).  
 
 ### <!--TABLE:: National level CH4 and CO2 flux table-->
 <!--National level GHG flux tables are reported for CH4 in MMT CO2-eq and kt CH4. CO2 emissions are reported as MMT CO2 and MMT C. All tables are rendered below and the 'tables' tab of Excel file.  Compare R and Excel calculations as a QA/QC check.-->
@@ -4356,12 +5171,12 @@ gt(lcfl.ocwb.ghg.state.2023  %>%
      rename_with(~str_extract(., "\\d+"), starts_with("area")),
    rowname_col = "State") %>%
   tab_header(title = md(
-    "Table 6-114: **CH<sub>4<sub>** and **CO<sub>2<sub>** Emissions from Other Constructed Waterbodies in Land Converted
-to Flooded Land in 2023 (MT **CO<sub>2<sub>** Eq.)")) %>%
+    "Table 6-114: CH<sub>4</sub> and CO<sub>2</sub> Emissions from Other Constructed Waterbodies in Land Converted
+to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
   tab_stubhead(label = "State") %>%
   cols_label(
-    `ch4.total.tonnes.co2.eq.y_freshwater pond` = md("**CH<sub>4<sub>**"),
-    `co2.tonnes.y_freshwater pond` = md("**CO<sub>2<sub>**"), 
+    `ch4.total.tonnes.co2.eq.y_freshwater pond` = md("CH<sub>4</sub>"),
+    `co2.tonnes.y_freshwater pond` = md("CO<sub>2</sub>"), 
     total = "Total") %>%
   opt_row_striping() %>%
   sub_missing(missing_text = " ") %>%
@@ -4391,6 +5206,14 @@ to Flooded Land in 2023 (MT **CO<sub>2<sub>** Eq.)")) %>%
                              cells_title(), cells_stub_grand_summary(),
                              cells_row_groups(),
                              cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), 
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)))) %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
@@ -4477,7 +5300,7 @@ mf_theme(
 
 
 mf_export(x = conus,
-          filename = "output/figures/LCFL.ocwb.2023.Tch4.svg",
+          filename = "output/figures/LCFL.ocwb.2023.Tch4.png",
           width = 7, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -4591,7 +5414,7 @@ dev.off()
 # 5. MAKE CO2 MAP-------
 
 mf_export(x = conus,
-          filename = "output/figures/LCFL.ocwb.2023.co2.svg",
+          filename = "output/figures/LCFL.ocwb.2023.co2.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -4704,9 +5527,14 @@ dev.off()
 
 ```
 
-```{r}
-# Load figure and render in markdown
-knitr::include_graphics(c("output/figures/LCFL.ocwb.2023.Tch4.svg", "output/figures/LCFL.ocwb.2023.co2.svg"))
+```{r, echo=FALSE, results='asis'}
+
+# Load figure and render in markdown, side by side
+cat('
+|         |         |
+| ------- | ------- |
+| ![](output/figures/LCFL.ocwb.2023.Tch4.png){width="50%"} | ![](output/figures/LCFL.ocwb.2023.co2.png){width="50%"} |
+')
 
 ```
 
@@ -4730,8 +5558,8 @@ gt(ef.gt.4) %>%
     "Table 6-115: IPCC (2019) Default CH<sub>4</sub> and CO<sub>2</sub> Emission Factors for Other Constructed Waterbodies in Land Converted to Flooded Land")) %>%
   cols_label(
     climate = "Climate Zone",
-    ch4.tonnes.ha.y = "Surface emission factor (Mt {{CH_4 ha^-1 y^-1}})",
-    co2.tonnes.ha.y = "Surface emission factor (Mt {{CO_2 ha^-1 y^-1}})") %>%
+    ch4.tonnes.ha.y = "Surface emission factor (Mt CH4 ha^-1 y^-1)",
+    co2.tonnes.ha.y = "Surface emission factor (Mt CO2 ha^-1 y^-1)") %>%
   fmt_number(decimals = 4) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -4887,9 +5715,9 @@ mf_theme(
   cex = 2, font = 3)
 
 # 5. MAKE PONDS MAP---------------
-# trying .svg vector format here
+# trying .png vector format here
 mf_export(x = conus,
-          filename = "output/figures/LCFL.ocwb.pond.2023.area.svg",
+          filename = "output/figures/LCFL.ocwb.pond.2023.area.png",
           width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
@@ -5009,7 +5837,7 @@ dev.off()
 
 ```{r}
 # Load figure and render in markdown
-knitr::include_graphics("output/figures/LCFL.ocwb.pond.2023.area.svg")
+knitr::include_graphics("output/figures/LCFL.ocwb.pond.2023.area.png")
 
 ```
 
@@ -5110,11 +5938,81 @@ lcfl.ocwb.area.state.all <- fl.cl.area.state.type %>%
 
 
 ### Uncertainty
-Uncertainty in estimates of CO2 and CH4 emissions from land converted to flooded land–other constructed water bodies include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in the NHD, NWI, NID, and NW are unknown, but uncertainty for remote sensing products is ±10 to 15 percent (IPCC 2003). EPA assumes an uncertainty of ± 15 percent for the flooded land area inventory based on expert judgment. These uncertainties do not include the underestimate of pond surface area discussed above. 
+Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flooded land–other constructed water bodies include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in the NHD, NWI, NID, and NW are unknown, but uncertainty for remote sensing products is ±10 to 15 percent (IPCC 2003). EPA assumes an uncertainty of ± 15 percent for the flooded land area inventory based on expert judgment. These uncertainties do not include the underestimate of pond surface area discussed above. 
 
 #### <!--TABLE:: Uncertainty-->
 ```{r}
 # need to add this table. It is currently rendered below
+
+gt(ch4.co2.uncertainty.gt, 
+   rowname_col = "subtype") %>%
+  tab_header(title = md(
+    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
+in Flooded Land Remaining Flooded Land")) %>% 
+  tab_stub_indent(
+    rows = everything(),
+    indent = 3) %>%
+  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
+             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
+             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
+  cols_add(Gas = "CH4", .before = year) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 5:8, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
+  opt_vertical_padding(2) %>%
+  cols_align(align = "left") %>%
+  fmt_number() %>%
+  sub_missing(missing_text = " ") %>%
+  tab_options(
+    heading.border.bottom.style = "solid", 
+    heading.border.bottom.color = "black",
+    column_labels.border.bottom.style = "solid", 
+    column_labels.border.bottom.color = "black", 
+    column_labels.border.bottom.width = 3, 
+    stub.text_transform = "capitalize",
+    stub.border.style = "none",
+    footnotes.marks = "letters",
+    grand_summary_row.border.style = "solid",
+    grand_summary_row.border.color = "black",
+    grand_summary_row.border.width = 3) %>%
+  grand_summary_rows(
+    columns = where(is.numeric), 
+    fmt = ~ fmt_number(.), 
+    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  text_replace(
+    locations = cells_stub(),
+    pattern = "surface",
+    replacement = "Surface Emissions") %>%  
+  text_replace(
+    locations = cells_stub(),
+    pattern = "downstream",
+    replacement = "Downstream Emissions") %>%
+  tab_style(style = cell_text(weight = "bold", color = "black"), 
+            locations = list(cells_grand_summary(), cells_stubhead(), 
+                             cells_title(), cells_stub_grand_summary(), 
+                             cells_row_groups(), cells_column_spanners(),
+                             cells_stub(1), 
+                             cells_column_labels())) %>%
+  tab_style(style = cell_fill(color = "lightgray"),
+            locations = list(
+              cells_column_labels(), cells_stubhead(), cells_column_spanners(),
+              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_stub(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+              cells_body(
+                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+  tab_style(style = cell_text(align = "center"), 
+            location = list(cells_body(), cells_column_labels(), 
+                            cells_grand_summary())) %>%
+  tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
+               locations = cells_column_spanners(spanners = "range")) 
+  
 ```
 
 ### QA/QC and Verification
@@ -5131,526 +6029,6 @@ The net effect of these recalculations was an average annual increase in CH4 and
 
 ### Planned Improvements
 Features < 8 ha in the NW that were not identified as canal/ditch were defined as freshwater ponds. Many of these features are lock chambers connected to an upstream reservoir. These systems likely have emission rates more similar to a reservoir than freshwater pond. In the next (i.e., 1990 through 2023) *Inventory* these systems will be classified as reservoirs.
-
-# Uncertainty analysis-->
-
-<!-- ### Define distributions for EFs -->
-<!-- ```{r} -->
-<!-- # Read in raw data used to calculate Rd value used in methodology -->
-<!-- rd <- readxl::read_excel("inputData/ipccDegassingReview.xlsx", sheet = "summary") -->
-<!-- names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),  -->
-<!--                  replacement = ".", x = names(rd)) -->
-
-<!-- # Filter out observations from Maeck et al. 2013.  These contain some outliers -->
-<!-- # and are lock and dam systems, not reflective of most reservoir surfaces. -->
-<!-- rd.no.maeck <- filter(rd, !grepl(pattern = "Maeck", x = rd$citation)) -->
-
-<!-- # visualize distribution -->
-<!-- fitdistrplus::plotdist(rd.no.maeck$Rd) # appears somewhat log-normal -->
-<!-- fitdistrplus::descdist(rd.no.maeck$Rd, boot = 1000) # suggest beta, but this requires value 0-1 -->
-
-<!-- # Attempted to fit beta, lnorm, weibull, and gamma distributions, but all failed, -->
-<!-- # likely due to zeroes in data.  Add small positive number and retry -->
-<!-- rd <- rd.no.maeck %>% -->
-<!--   mutate(Rd = replace(Rd, Rd == 0, 0.00001)) -->
-<!-- descdist(rd$Rd, boot = 1000) # suggest beta -->
-<!-- fitdist(rd$Rd, "beta") # beta requires values 0-1 -->
-<!-- flnorm <- fitdist(rd$Rd, "lnorm") # this seems to work -->
-<!-- denscomp(flnorm) # bad fit -->
-<!-- qqcomp(flnorm) # bad fit -->
-<!-- cdfcomp(flnorm) # not bad -->
-<!-- ppcomp(flnorm) # not bad -->
-
-<!-- # Generate simulated data using fitted distribution and compare to original data -->
-<!-- simData <- rlnorm(100, meanlog = flnorm$estimate[[1]], sdlog = flnorm$estimate[[2]]) -->
-<!-- data <- data.frame(rd = c(rd$Rd, simData), source = c(rep("ipcc", length(rd$Rd)), rep("sim", 100))) -->
-<!-- # the fit looks OK.   -->
-<!-- ggplot(data, aes(x=rd, color = source)) + -->
-<!--   geom_histogram()  -->
-<!-- # but when used in uncertainty simulation generates much too large numbers. -->
-<!-- # how about triangle distribution as discussed in IPCC 2006 CH.3 -->
-<!-- triangle::rtriangle(n = 100, a = 0.05, b = 0.22, c = 0.09)# 2019, table 7.1 -->
-<!-- ## view the distribution -->
-<!-- tri <- rtriangle(n = 10000, a = 0.05, b = 0.22, c = 0.09) -->
-<!-- hist(tri, breaks=100, main="Triangle Distribution", xlab="x") -->
-<!-- # triangle distribution also generates far too large numbers in simulation -->
-
-<!-- # How about truncated log normal? -->
-<!-- EnvStats::rlnormTrunc(100,  -->
-<!--                       meanlog = flnorm[1]$estimate[[1]],  -->
-<!--                       sdlog = flnorm[1]$estimate[[2]],  -->
-<!--                       min = 0.05, max = 0.22) %>% summary() -->
-<!-- # still too big. -->
-<!-- # can I define a log-normal distribution that approximates what is reported in  -->
-<!-- # IPCC 2019 Table 7.10?  After trying all these variations, sim0.085 was the -->
-<!-- # only one that produced a confidence interval containing the mean. -->
-<!-- sim1.3 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.3)) -->
-<!-- sim1.4 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.4)) -->
-<!-- sim1.5 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.5)) -->
-<!-- sim1.6 <- rlnorm(100, meanlog = log(0.09), sdlog = log(1.6)) -->
-<!-- sim0.085 <- rlnorm(100, meanlog = log(0.085), sdlog = log(1.5)) -->
-<!-- summary(sim1.3);summary(sim1.4);summary(sim1.5);summary(sim1.6) -->
-<!-- summary(sim0.085) -->
-
-<!-- ``` -->
-
-<!-- ### Simulations -->
-
-<!-- ```{r} -->
-<!-- # Read in emission factors -->
-<!-- ef.error <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>% -->
-<!--   # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI -->
-<!--   # of total emissions to not include the mean.  Here I'm expanding the CI -->
-<!--   # of the EF to force symmetry around mean. -->
-<!--   # Calculating CH4 emission factor standard deviation from 95% CI and n reported in guidance. -->
-<!--   # This will allow parameter distribution to be defined using rnorm, the preferred IPCC method. -->
-<!--   # No N reported for CO2, so using uniform distribution. -->
-<!--   # https://stats.stackexchange.com/questions/30402/how-to-calculate-mean-and-standard-deviation-in-r-given-confidence-interval-and -->
-<!--   mutate(ch4.tonnes.ha.y.upr = replace(ch4.tonnes.ha.y.upr,  -->
-<!--                                        subtype == "freshwater pond", -->
-<!--                                        0.248), -->
-<!--          ch4.sd = ((ch4.tonnes.ha.y.upr - ch4.tonnes.ha.y)/sqrt(n.ch4)) * 1.96) -->
-
-<!-- # put 1990 and 2022 data into a list to utilize 1990 - 2020 code -->
-<!-- fl <- list("1990" = fl.e$`1990` %>%  -->
-<!--              select(type, subtype, climate, area_ha_new, lu, age) %>% -->
-<!--              mutate(calc_year = 1990), -->
-<!--            "2022" = fl.e$`2022` %>%  -->
-<!--              select(type, subtype, climate, area_ha_new, lu, age) %>% -->
-<!--              mutate(calc_year = 2022)) %>% -->
-<!--   map(., ~ filter(.x, age > 0 | is.na(age))) -->
-
-
-<!-- # record nrow of fl list prior to merge.  Should be identical after merge. -->
-<!-- n.row.prior <- lapply(fl[c("1990", "2022")], nrow) #6,532,206 and 6,535,552 -->
-
-<!-- # Merge emission factors with 1990 and 2022 area inventory. -->
-<!-- tic() # 4 minutes with merge, 1.7 seconds with left join! -->
-<!-- fl <- lapply(fl[c("1990", "2022")], function(x) {  # first and last year -->
-<!--   left_join(x, ef.error)}) -->
-<!-- toc() -->
-
-<!-- # Make sure no records were lost during merge -->
-<!-- # LOOKS GOOD -->
-<!-- unlist(n.row.prior) == unlist(lapply(fl, nrow)) -->
-
-<!-- # Calculate emissions i times and aggregate by subtype and type -->
-<!-- fl.error.sim.subtype <- list() -->
-<!-- fl.error.sim.type <- list() -->
-<!-- set.seed(3452) # make it reproducible -->
-
-<!-- tic() # map: 85 seconds for 10 simulations, 1000 = 142 minutes, 10,000 = 23 hours, much longer with future_map   -->
-<!-- for (i in 1:10000) { #  -->
-<!--   print(i) -->
-<!--   fl.error.sim.i <- map(fl, function(x) { x %>% -->
-<!--       mutate(co2.tonnes.ha.y = runif(nrow(x), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr), -->
-<!--              ch4.tonnes.ha.y = rnorm(nrow(x), mean = ch4.tonnes.ha.y, sd = ch4.sd), -->
-<!--              # using rlnorm for downstream, see above.  mean of 0.085 needed to get lower -->
-<!--              # confidence interval less than mean estimate.  true mean is 0.09 -->
-<!--              dn.ef = rlnorm(nrow(x), meanlog = log(0.085), sdlog = log(1.5)), -->
-<!--              area_ha_new = runif(nrow(x), #15% error in area -->
-<!--                                  min = area_ha_new - (area_ha_new*0.15),  -->
-<!--                                  max = area_ha_new + (area_ha_new*0.15)), -->
-<!--              co2.tonnes.y = area_ha_new * co2.tonnes.ha.y, -->
-<!--              ch4.surface.tonnes.y = area_ha_new * ch4.tonnes.ha.y, -->
-<!--              ch4.dn.tonnes.y = ifelse(type == "other constructed waterbodies", # no DN for 'other' -->
-<!--                                       0, -->
-<!--                                       ch4.surface.tonnes.y * dn.ef), -->
-<!--              ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y) -->
-<!--   }) -->
-
-
-<!--   # Aggregate by subtype -->
-<!--   fl.error.sim.subtype[[i]] <- map(fl.error.sim.i, function(x) { x %>% -->
-<!--       # Sum emissions for each iteration of simulation.  Only keep summed data.  This reduces memory demands. -->
-<!--       group_by(lu, subtype) %>% -->
-<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4 -->
-<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4 -->
-<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28, # total CH4 -->
-<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2 -->
-<!--                 year = unique(calc_year)) %>%  -->
-<!--       mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
-<!--   }) -->
-
-<!--   # Aggregate by type -->
-<!--   fl.error.sim.type[[i]] <- map(fl.error.sim.i, function(x) {x %>% -->
-<!--       mutate(type = case_when(subtype == "inundation area" ~ "reservoir", # combine for total row -->
-<!--                               subtype %in% c("canals and ditches", "freshwater pond") ~ "other constructed waterbodies", -->
-<!--                               TRUE ~ subtype)) %>% -->
-<!--       group_by(lu, type) %>% -->
-<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y , na.rm = TRUE)/1000000)*28, # surface CH4 -->
-<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, # downstream CH4 -->
-<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = T)/1000000)*28, # total CH4 -->
-<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, # total CO2 -->
-<!--                 year = unique(calc_year)) %>% -->
-<!--       mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
-<!--   }) -->
-<!-- } -->
-<!-- toc() -->
-
-
-<!-- # Warning message: -->
-<!-- # Problem with `mutate()` column `co2.tonnes.ha.y`. -->
-<!-- # i `co2.tonnes.ha.y = runif(nrow(fl.error), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr)`. -->
-<!-- # i NAs produced -->
-<!-- # expected because ef.error contains NA values for co2.tonnes.ha.y.lwr and co2.tonnes.ha.y.upr -->
-
-<!-- # Each iteration of the loop above creates a list of two elements (one for each year).   -->
-<!-- # This list gets assigned to one element of fl.error.sim, thus fl.error.sim has lists -->
-<!-- # nested within a list.  flatten() unnests the lists -->
-<!-- length(fl.error.sim.subtype) # 10000 elements -->
-<!-- fl.error.sim.subtype <- flatten(fl.error.sim.subtype)  -->
-<!-- length(fl.error.sim.subtype) # 20000 elements -->
-
-<!-- length(fl.error.sim.type) # 10,000 elements -->
-<!-- fl.error.sim.type <- flatten(fl.error.sim.type)  -->
-<!-- length(fl.error.sim.type) # 20,000 elements -->
-
-
-<!-- ``` -->
-
-
-<!-- ### Table:: Uncertainty -->
-<!-- ```{r} -->
-
-
-<!-- # STEP 1: COLLAPSE LIST INTO DF -->
-<!-- # ch4.co2 uncertainty table by subtype.  ~8 minutes on memory intensive DMAP -->
-<!-- ch4.co2.uncertainty.table <-  fl.error.sim.subtype %>% # ch4.co2.uncertainty -->
-<!--   reduce(bind_rows) %>% # collapse all elements of list into single df. -->
-<!--   group_by(lu, subtype, year) %>% # group by subtype -->
-<!--   summarize(across(everything(), list(min = min, -->
-<!--                                       max = max))) %>% -->
-<!--   ungroup() %>% -->
-<!--   arrange(year, lu, subtype) -->
-
-<!-- # ch4.co2 uncertainty table by type (subtypes nested in types) -->
-<!-- tic() # 56 minutes with 10,000 iterations -->
-<!-- ch4.co2.uncertainty.table.total <- fl.error.sim.type %>% -->
-<!--   reduce(full_join) %>% # merge all elements of list into single df. could use bind rows -->
-<!--   group_by(lu, type, year) %>% # group by type -->
-<!--   summarize(across(everything(), list(min = min, -->
-<!--                                       max = max))) %>% -->
-<!--   ungroup() %>% -->
-<!--   arrange(year, lu, type) -->
-<!-- toc() -->
-
-<!-- # STEP 2:  CALCULATE MEAN EMISSIONS TO COMBINE WITH UNCERTAINTY ESTIMATES -->
-<!-- # Bring in mean flux estimates for 1990 and 2022.  Reported in `Table::FLRFL-reservoirs CH4 -->
-<!-- # emissions by mechanism (dn, surface), type (inundation, reservoir), and state' above, -->
-<!-- # but recalculated here to merge with uncertainty results. -->
-
-<!-- # List with emissions from 1990 and 2022.  Assume these are "mean" values -->
-<!-- fl.for.mean <- list("1990" = fl.e$`1990` %>%  -->
-<!--                       select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y")), -->
-
-<!--                     "2022" = fl.e$`2022` %>%  -->
-<!--                       select(lu, type, subtype, climate, age, area_ha_new, contains("tonnes.y"))) %>% -->
-<!--   map(., ~ filter(.x, age > 0 | is.na(age))) -->
-
-
-<!-- # ch4.co2 mean fluxes by subtype -->
-<!-- ch4.co2.mean.table <- fl.for.mean %>%  # first and last year -->
-<!--   lapply(., function(x) { -->
-<!--     x %>% -->
-<!--       select(lu, subtype, ch4.surface.tonnes.y, ch4.dn.tonnes.y,  -->
-<!--              ch4.total.tonnes.y, co2.tonnes.y) %>% -->
-<!--       group_by(lu, subtype) %>% # subtype -->
-<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y, na.rm = TRUE)/1000000)*28,  -->
-<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y, na.rm = TRUE)/1000000)*28, -->
-<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y, na.rm = TRUE)/1000000)*28, -->
-<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y, na.rm = TRUE)/1000000, -->
-<!--                 ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)  -->
-<!--   }) %>% -->
-<!--   purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element -->
-<!--   map_dfr(., bind_rows) %>% # collapse into DF -->
-<!--   ungroup() # to be safe -->
-
-
-
-
-<!-- # ch4.co2 mean fluxes total! -->
-<!-- ch4.co2.mean.table.total <- fl.for.mean %>%  # first and last year -->
-<!--   lapply(., function(x) { -->
-<!--     x %>% -->
-<!--       select(lu, type, ch4.surface.tonnes.y, ch4.dn.tonnes.y, -->
-<!--              ch4.total.tonnes.y, co2.tonnes.y) %>% -->
-<!--       group_by(lu, type) %>% # type -->
-<!--       summarize(ch4.surface.mmt.co2.eq.y = (sum(ch4.surface.tonnes.y)/1000000)*28, -->
-<!--                 ch4.dn.mmt.co2.eq.y = (sum(ch4.dn.tonnes.y)/1000000)*28, -->
-<!--                 ch4.total.mmt.co2.eq.y = (sum(ch4.total.tonnes.y)/1000000)*28, -->
-<!--                 co2.mmt.co2.eq.y = sum(co2.tonnes.y)/1000000, -->
-<!--                 ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y) -->
-<!--   }) %>% -->
-<!--   purrr::imap(., ~mutate(.x, year = as.numeric(.y))) %>%  # add calculation year as a column in each list element -->
-<!--   map_dfr(., bind_rows) %>% # collapse into DF -->
-<!--   ungroup()  # to be safe -->
-
-
-<!-- # STEP 3: COMBINE MEAN AND UNCERTAINTY ESTIMATES -->
-<!-- bound.perc = function(x,y){((x - y)/y) *100} # function for required fields -->
-
-<!-- ch4.co2.uncertainty.mean.table <- merge(ch4.co2.uncertainty.table, ch4.co2.mean.table) %>% -->
-<!--   mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,  -->
-<!--                                            ch4.surface.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,  -->
-<!--                                            ch4.surface.mmt.co2.eq.y), -->
-<!--          upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,  -->
-<!--                                       ch4.dn.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,  -->
-<!--                                       ch4.dn.mmt.co2.eq.y), -->
-<!--          upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,  -->
-<!--                                          ch4.total.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,  -->
-<!--                                          ch4.total.mmt.co2.eq.y), -->
-<!--          upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,  -->
-<!--                                    co2.mmt.co2.eq.y), -->
-<!--          lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,  -->
-<!--                                    co2.mmt.co2.eq.y), -->
-<!--          upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max, -->
-<!--                                          ghg.total.mmt.co2.eq.y), -->
-<!--          lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min, -->
-<!--                                          ghg.total.mmt.co2.eq.y)) %>% -->
-<!--   relocate(lu, subtype, year, contains("surface"), contains("dn"), contains("total"))  -->
-
-
-<!-- ch4.co2.uncertainty.mean.table.total <- merge(ch4.co2.uncertainty.table.total, ch4.co2.mean.table.total) %>% -->
-<!--   mutate(upr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_max,  -->
-<!--                                            ch4.surface.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.surface = bound.perc(ch4.surface.mmt.co2.eq.y_min,  -->
-<!--                                            ch4.surface.mmt.co2.eq.y), -->
-<!--          upr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_max,  -->
-<!--                                       ch4.dn.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.dn = bound.perc(ch4.dn.mmt.co2.eq.y_min,  -->
-<!--                                       ch4.dn.mmt.co2.eq.y), -->
-<!--          upr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_max,  -->
-<!--                                          ch4.total.mmt.co2.eq.y), -->
-<!--          lwr.perc.ch4.total = bound.perc(ch4.total.mmt.co2.eq.y_min,  -->
-<!--                                          ch4.total.mmt.co2.eq.y), -->
-<!--          upr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_max,  -->
-<!--                                    co2.mmt.co2.eq.y), -->
-<!--          lwr.perc.co2 = bound.perc(co2.mmt.co2.eq.y_min,  -->
-<!--                                    co2.mmt.co2.eq.y), -->
-<!--          upr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_max, -->
-<!--                                          ghg.total.mmt.co2.eq.y), -->
-<!--          lwr.perc.ghg.total = bound.perc(ghg.total.mmt.co2.eq.y_min, -->
-<!--                                          ghg.total.mmt.co2.eq.y)) %>% -->
-<!--   relocate(lu, type, year, contains("surface"), contains("dn"), contains("total"))  -->
-
-
-<!-- ###FLRFL TABLE -->
-<!-- # STEP 4: REPORT FOR RESERVOIR TABLE -->
-<!-- # Reservoir part of table -->
-<!-- ch4.co2.uncertainty.mean.table %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% # also included in list element name -->
-<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
-<!--              subtype == "reservoir") %>% -->
-<!--       pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>% -->
-<!--       mutate(surf.dn.tot = ifelse(grepl("surface", flux.name), -->
-<!--                                   "surface", -->
-<!--                                   ifelse(grepl("dn", flux.name), -->
-<!--                                          "downstream", -->
-<!--                                          ifelse(grepl("tot", flux.name), -->
-<!--                                                 "total", -->
-<!--                                                 ifelse(grepl("co2", flux.name), #Co2 is total, no downstream -->
-<!--                                                        "total", -->
-<!--                                                        "oops")))), -->
-<!--              flux.name = gsub(c(".surface|.dn|.total"), "", flux.name)) %>%  -->
-<!--       pivot_wider(names_from = flux.name, values_from = flux) %>% -->
-<!--       select(-contains("ghg"), -starts_with("co2"), -lwr.perc.co2, -upr.perc.co2) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL -->
-<!--       filter(surf.dn.tot != "total") %>% -->
-<!--       arrange(desc(subtype)) -->
-<!--   }) -->
-
-<!-- #Total part of table -->
-<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% # also included in list element name -->
-<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
-<!--              type == "reservoir") %>% -->
-<!--       select(lu, type, contains("total")) %>% -->
-<!--       select(-contains("ghg")) -->
-<!--   }) -->
-
-
-
-<!-- # STEP 5: REPORT FOR OTHER CONSTRUCTED WATERBODIES TABLE -->
-<!-- # canals and ditches / freshwater pond rows -->
-<!-- ch4.co2.uncertainty.mean.table %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% # also included in list element name -->
-<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
-<!--              subtype %in% c("canals and ditches", "freshwater pond")) %>% -->
-<!--       select(subtype, contains("total")) %>% -->
-<!--       select(-contains("ghg")) -->
-<!--   }) -->
-
-<!-- # total row -->
-<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% # also included in list element name -->
-<!--       filter(lu == "Flooded Land Remaining Flooded Land", -->
-<!--              type == "other constructed waterbodies") %>% -->
-<!--       select(lu, type, contains("total")) %>% -->
-<!--       select(-contains("ghg")) -->
-<!--   }) -->
-
-<!-- ###LCFL TABLE -->
-<!-- # REPORT FOR RESERVOIR TABLE -->
-<!-- # first part of table, dissagregated values -->
-<!-- ch4.co2.uncertainty.mean.table %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% -->
-<!--       filter(lu == "Land Converted to Flooded Land", -->
-<!--              subtype == "reservoir") %>%  -->
-<!--       pivot_longer(!c("lu", "subtype"), names_to = "flux.name", values_to = "flux") %>%  -->
-<!--       filter(!grepl("ch4.total", flux.name)) %>% # not reporting CH4 from dn + surface -->
-<!--       # distinct(flux.name) %>% print(n=Inf) %>% -->
-<!--       mutate(surf.dn.tot = ifelse(grepl("surface", flux.name), -->
-<!--                                   "surface", -->
-<!--                                   ifelse(grepl("dn", flux.name), -->
-<!--                                          "downstream", -->
-<!--                                          ifelse(grepl("^co2", flux.name), #starts with co2 -->
-<!--                                                 "surface", -->
-<!--                                                 ifelse(grepl("ghg", flux.name), -->
-<!--                                                        "total", #CH4 + CO2 -->
-<!--                                                        #all CO2 are surface -->
-<!--                                                        ifelse(flux.name %in% c("upr.perc.co2", "lwr.perc.co2"),  -->
-<!--                                                               "surface", -->
-<!--                                                               "oops"))))), -->
-<!--              flux.name = gsub(c(".surface|.dn|.total"), "", flux.name))  %>% # simplify flux name   -->
-<!--       pivot_wider(names_from = flux.name, values_from = flux) %>% -->
-<!--       select(-contains("ghg")) %>% # ghg is combined CO2 and CH4.  no CO2 for FLRFL -->
-<!--       filter(surf.dn.tot != "total") %>% -->
-<!--       arrange(desc(subtype)) -->
-<!--   }) -->
-
-<!-- # total part of table -->
-<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% -->
-<!--       filter(lu == "Land Converted to Flooded Land", -->
-<!--              type == "reservoir") %>% # in this object, reservoir == reservoir + inundation -->
-<!--       select(lu, type, contains("ghg")) -->
-<!--   }) -->
-
-<!-- # REPORT FOR OTHER CONSTRUCTED WATERBODIES -->
-<!-- # by gas -->
-<!-- ch4.co2.uncertainty.mean.table %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% -->
-<!--       filter(lu == "Land Converted to Flooded Land", -->
-<!--              subtype %in% c("freshwater pond", "canals and ditches")) %>% -->
-<!--       select(lu, subtype, contains("total"), starts_with("co2"), contains("perc")) %>% -->
-<!--       select(-contains("ghg")) %>% -->
-<!--       mutate(across(!contains("perc") & -lu & -subtype, ~ .x * 1000)) # convert to ktonnes!!!! -->
-<!--   }) -->
-
-<!-- # total part of table -->
-<!-- ch4.co2.uncertainty.mean.table.total %>%  -->
-<!--   split(., .$year) %>% # split into list -->
-<!--   lapply(., function(x) { -->
-<!--     x %>%  -->
-<!--       select(-year) %>% -->
-<!--       filter(lu == "Land Converted to Flooded Land", -->
-<!--              type == "other constructed waterbodies") %>% -->
-<!--       select(lu, type, contains("ghg")) %>% -->
-<!--       mutate(across(!contains("perc") & -lu & -type, ~ .x * 1000)) # convert to ktonnes!!!! -->
-<!--   }) -->
-
-<!-- ``` -->
-
-<!-- ### Tables: A. Data -->
-<!-- Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.   -->
-<!-- ```{r} -->
-<!-- # 1990 first--------------- -->
-<!-- A.Data.1990.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "1990"] # subset all "1990" results from list -->
-
-<!-- names(A.Data.1990.l) <- 1:length(A.Data.1990.l) # rename each list element with element position.  Each position = 1 iteration -->
-
-<!-- # Add iteration number as a new column in each dataframe in list, collapse to df, format.... -->
-<!-- A.Data.1990 <- imap(A.Data.1990.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name -->
-<!--   bind_rows(.) %>% -->
-<!--   select(-year, -ghg.total.mmt.co2.eq.y) %>% -->
-<!--   relocate(iteration) %>% -->
-<!--   ungroup() -->
-
-<!-- # prepare data to write to Excel -->
-<!-- A.Data.1990.export <- A.Data.1990 %>% -->
-<!--   pivot_wider(names_from = c(lu, subtype),  -->
-<!--               values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y, -->
-<!--                               ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>% -->
-<!--   # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream) -->
-<!--   # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates" -->
-<!--   # Replace 0 with NE for these cases -->
-<!--   mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0 -->
-<!--                 ~replace(., . == 0, "NE"))) # replace the zeroes with NE -->
-
-<!-- # paste into excel for formatting, then paste into Word. -->
-<!-- file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx" -->
-<!-- wb <- wb_load(file) -->
-<!-- openxlsx2::write_data(wb, -->
-<!--                       x = A.Data.1990.export, -->
-<!--                       sheet = "A. Data (Base Year, 1990)", -->
-<!--                       row_names = FALSE, col_names = TRUE, -->
-<!--                       start_row = 11,  -->
-<!--                       start_col = 2) -->
-<!-- openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel -->
-
-
-
-<!-- # 2022--------------- -->
-<!-- A.Data.2022.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "2022"] # subset all "2022" results from list -->
-
-<!-- names(A.Data.2022.l) <- 1:length(A.Data.2022.l) # rename each list element with element position.  Each position = 1 iteration -->
-
-<!-- # Add iteration number as a new column in each dataframe in list, collapse to df, format.... -->
-<!-- A.Data.2022 <- imap(A.Data.2022.l, ~mutate(.x, iteration = as.numeric(.y))) %>% # imap pulls from list element name -->
-<!--   bind_rows(.) %>% -->
-<!--   select(-year, -ghg.total.mmt.co2.eq.y) %>% -->
-<!--   relocate(iteration) %>% -->
-<!--   ungroup() -->
-
-<!-- # prepare data to write to excel -->
-<!-- A.Data.2022.export <- A.Data.2022 %>% -->
-<!--   pivot_wider(names_from = c(lu, subtype),  -->
-<!--               values_from = c(ch4.surface.mmt.co2.eq.y, ch4.dn.mmt.co2.eq.y, -->
-<!--                               ch4.total.mmt.co2.eq.y, co2.mmt.co2.eq.y)) %>% -->
-<!--   # lu * subtype combinations for which flux is not estimate (e.g. canal, downstream) -->
-<!--   # have a flux value of 0 in this object.  IPCC requires a value of NE for "Not Estimates" -->
-<!--   # Replace 0 with NE for these cases -->
-<!--   mutate(across(where(~sum(.) == 0), # if the sum of all values in column are 0 -->
-<!--                 ~replace(., . == 0, "NE"))) # replace the zeroes with NE -->
-
-
-<!-- # paste into excel for formatting, then paste into Word. -->
-<!-- file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx" -->
-<!-- wb <- wb_load(file) -->
-<!-- openxlsx2::write_data(wb, -->
-<!--                       x = A.Data.1990.export, -->
-<!--                       sheet = "A. Data (Current Year)", -->
-<!--                       row_names = FALSE, col_names = TRUE, -->
-<!--                       start_row = 11,  -->
-<!--                       start_col = 2) -->
-<!-- openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel -->
-
-
-<!-- ``` -->
 
 
 ```{r clean markdown script, results="hide"}
