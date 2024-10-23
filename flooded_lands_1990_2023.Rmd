@@ -126,6 +126,13 @@ fl.sf <-  fl.sf %>%
   filter(!(is.na(original_area_meters) | is.na(stusps) | is.na(climate)))  
 nrow(fl.sf) #6,250,008
  
+# problem with 253 features in Florida with huge area estimates. Cumulative
+# area of these 53 features exceeds that of the entire state by a factor of
+# 6. Alex is working on these; omit for now. [10/23/2024]
+fl.sf <-  fl.sf %>% 
+  filter(!round(area_meters, 0) == 4162954300)
+nrow(fl.sf) # 6,249,755
+
 # how many have dam construction year?
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
   summarize(dam.n = sum(!is.na(dam_year_completed)), #18,708
@@ -387,10 +394,9 @@ nrow(fl.df) # 6,535,554 good
 # Need to calculate emission separately for each year in time series
 # Put copy of data frame version sf object into 33 separate list elements.  Each element represents
 # one calculation year.
-fl <- map(.x = rep("fl.df", 34), .f = get) # `get` will find all instances of X, map dumps into list
-tic() # weird, takes a while for operation to roll, but then tic toc reports 0.003 seconds
-names(fl) <- 1990:2023 # name each list element.  
-toc()
+fl <- map(.x = rep("fl.df", 34), .f = get) %>% # `get` will find all instances of X, map dumps into list
+  set_names(., 1990:2023) # name each list element.  
+
 format(object.size(fl), units = "auto") # 15.9 GB as dataframe!
 
 # add calculation year as a column in each list element
@@ -431,7 +437,7 @@ with_progress({ # add progress bar
 })
 toc()
 
-fl
+lapply(fl, function(x) nrow(x)) # fewer in 1990 than 2023, good
 
 
 
@@ -459,8 +465,8 @@ fl
 ### <!--All polygons-->
 ```{r, results="hide"}
 # Read in emission factors
-#ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
-ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
+ef <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>%
+# ef <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
   select(subtype, lu, climate, co2.tonnes.ha.y, ch4.tonnes.ha.y)
 
 # record nrow of fl list prior to merge.  Should be identical after merge.
@@ -510,7 +516,7 @@ map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
 # <!--Uncertainty analysis-->
 
 ### <!--Define distributions for EFs-->
-```{r}
+```{r eval=FALSE}
 # Read in raw data used to calculate Rd value used in methodology
 rd <- readxl::read_excel("~/shared/jbeaulie/inputData/ipccDegassingReview.xlsx", sheet = "summary")
 names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),
@@ -569,9 +575,9 @@ summary(sim0.085)
 
 ```
 
-### <!--Simulations-->
+### <!--Uncertainty Simulations-->
 
-```{r}
+```{r eval=FALSE}
 # Read in emission factors
 ef.error <- readxl::read_excel("~/shared/jbeaulie/inputData/defaultEmissionFactors.xlsx") %>%
   # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI
@@ -686,7 +692,7 @@ length(fl.error.sim.type) # 20,000 elements
 
 
 ### <!--Table:: Uncertainty-->
-```{r}
+```{r eval=FALSE}
 
 
 # STEP 1: COLLAPSE LIST INTO DF
@@ -953,7 +959,7 @@ ch4.co2.uncertainty.mean.table.total %>%
 
 ### <!--Tables: A. Data-->
 <!--Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.-->
-```{r}
+```{r eval=FALSE}
 # 1990 first---------------
 A.Data.1990.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "1990"] # subset all "1990" results from list
 
@@ -1501,7 +1507,7 @@ mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
 mf_inset_off()
 
 # Hawaii
-mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
+mf_inset_on(x = hawaii, fig = c(.35,.5,.06,.27)) #c(X1,X2,Y1,Y2)
 mf_map(hawaii, var = "climate", type = "typo",
        border = NA, # don't include outline of climate zone
        pal = hawaii$color,
@@ -1525,7 +1531,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1548,7 +1554,7 @@ mf_map(pr.fl,
        col = "black",
        add = TRUE)
 
-# Title inset?
+# Title inset
 mf_title("Puerto Rico", 
          bg = NA,
          pos = "left",
@@ -1562,8 +1568,8 @@ mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
 
 # close the inset
 mf_inset_off()
-
-# Add Alaska
+# 
+# # Add Alaska
 mf_inset_on(x = alaska, fig = c(.02,.3,.08,0.42)) #c(X1,X2,Y1,Y2)
 mf_map(alaska, var = "climate", type = "typo",
        border = NA, # don't include outline of climate zone
@@ -1580,7 +1586,7 @@ mf_map(alaska.fl,
        add = TRUE)
 
 # Title inset?
-mf_title("Alaska", 
+mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
@@ -1877,7 +1883,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -1952,14 +1958,7 @@ mf_inset_off()
 
 dev.off()
 
-# ggplot(us.plot.flrfl.total.ch4.2021.reservoir) +
-#   geom_sf(aes(fill = ch4.total.ktonnes.y)) +
-#   scale_fill_distiller(expression(kt~CH[4]~y^-1), 
-#                        palette = "Blues", direction = 1) +
-#   coord_sf(datum = NA) + # this removes grid lines.
-#   theme(panel.background = element_blank())
-# 
-# ggsave("output/figures/FLRFL.reservoir.2021.Tch4.tiff")
+
 ```
 
 ```{r}
@@ -2088,7 +2087,7 @@ EPA assumes that all features included in the NW network are subject to water-le
 NWI features were considered “managed” if they had a Special Modifier value indicating the presence of management activities (Figure 6-12). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see “Water Regime” in Figure 6-12). NWI features that met these criteria, were greater than 8 ha in surface area, and were not a canal/ditch (see emissions from land converted to flooded land – other constructed waterbodies) were defined as reservoirs.
 
 ###### <!--FIGURE: NWI Criteria-->
-
+**Figure 6-12: Selected Features from NWI that Meet Flooded Lands Criteria**
 ```{r}
 # insert NWI table
 knitr::include_graphics("inputData/NWI_criteria.png")
@@ -2239,7 +2238,7 @@ flrfl.area.reservoir.state.all <-
 
 Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). The CH~4~ emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO2 emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
 
-```{r}
+```{r eval=FALSE}
 
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
@@ -2693,14 +2692,8 @@ mf_theme(
 # 5. MAKE CANALS AND DITCHES MAP---------------
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.ditch.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
-
-
-# #from above
-# mf_export(x = conus,
-#           filename = "output/figures/FLRFL.reservoir.2023.Tch4.png",
-#           width = 1200, expandBB = c(.3,.3,0.1,.1))
 
 # CONUS
 mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
@@ -2712,20 +2705,20 @@ mf_map(conus,
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+          cex = 1)
 mf_inset_off()
 
 
 # Hawaii
 mf_inset_on(x = hawaii, fig = c(.35,.5,.02,.27)) #c(X1,X2,Y1,Y2)
-mf_map(hawaii, 
-       var = "name", 
+mf_map(hawaii,
+       var = "name",
        type = "typo",
        border = "black", # state borders
        pal = hawaii$color.ditch, # pallete used in 1990-2020
        leg_pos = NA)
 # Title inset
-mf_title("Hawaii", 
+mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
@@ -2733,7 +2726,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -2742,14 +2735,14 @@ mf_inset_off()
 # Puerto Rico
 mf_inset_on(x = pr, fig = c(0.65, 0.8, 0.02, 0.21)) # Where is the inset on the map?
 # display the target municipality
-mf_map(pr, var = "name", 
+mf_map(pr, var = "name",
        type = "typo",
        border = "black", # state borders
        pal = pr$color.ditch, # pallete used in 1990-2020
        leg_pos = NA)
 
 # Title inset
-mf_title("Puerto Rico", 
+mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
@@ -2766,14 +2759,14 @@ mf_inset_off()
 
 # Add Alaska
 mf_inset_on(x = alaska, fig = c(.02,.3,.05,0.43)) #c(X1,X2,Y1,Y2)
-mf_map(alaska, var = "name", 
+mf_map(alaska, var = "name",
        type = "typo",
        border = "black", # state border
        pal = alaska$color.ditch, # pallete used in 1990-2020
        leg_pos = NA)
 
 # Title inset
-mf_title("Alaska", 
+mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
@@ -2803,7 +2796,7 @@ mf_legend(type = "choro", pos = "left",
 mf_inset_off()
 
 # Add Map Title
-mf_title(txt = expression(A.~CH[4]~Emissions~from~Ditches~and~Canals), 
+mf_title(txt = expression(A.~CH[4]~Emissions~from~Ditches~and~Canals),
          pos = "left",
          bg = NA,
          line = 2, # required to get full title to fit in plot space
@@ -2819,14 +2812,7 @@ dev.off()
 # 6. MAKE PONDS MAP-------------------------
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.pond.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
-#mf_shadow(cs, add = TRUE,col = "grey50")
-
-# for .png
-# mf_export(x = conus,
-#           filename = "output/figures/FLRFL.ocwb.pond.2023.Tch4.png",
-#           width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
-# #mf_shadow(cs, add = TRUE,col = "grey50")
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 
 # CONUS
 mf_inset_on(x = conus, fig = c(.2,.99,.02,.99)) #c(X1,X2,Y1,Y2)
@@ -2859,7 +2845,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -3263,7 +3249,7 @@ mf_theme(
 # .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.ditch.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -3297,7 +3283,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -3385,7 +3371,7 @@ dev.off()
 # .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.pond.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -3419,7 +3405,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -3684,7 +3670,7 @@ flrfl.pond.area.by.state.all <- fl.cl.area.state.type %>%
 Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (ponds, canals/ditches) in flooded land remaining flooded land (Table 6-96) are estimated using IPCC Approach 2 and include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in default emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 to 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the flooded land area estimates is assumed and is based on expert judgment.
 
 #### <!--TABLE:: Uncertainty Estimates-->
-```{r}
+```{r eval=FALSE}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
 gt(ch4.co2.uncertainty.gt, 
@@ -3801,7 +3787,7 @@ In 2022, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% f
 ### <!--FIGURE::  Climate zone and Flooded lands map-->
 <!--Need to add Note.-->
 **Figure 6-17: U.S. Reservoirs (black polygons) in the Land Converted to Flooded Land Category in 2023**
-```{r, results="hide"}
+```{r, results="hide", fig.cap='Note: Colors represent climate zone used to derive IPCC default emission factors. Reservoirs (indicated by black polygons) are sparsely distributed across United States, but can be seen in MN, IL, and IN in this image.'}
 
 # BREAK GEOGRAPHIES FOR INSETS AND PROJECT----------
 # Define LCFL in 2023
@@ -3932,7 +3918,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
@@ -4248,7 +4234,7 @@ mf_theme(
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.reservoir.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1))
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -4278,7 +4264,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -4361,7 +4347,7 @@ dev.off()
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.reservoir.2023.co2.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -4391,7 +4377,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -4850,7 +4836,7 @@ lcfl.res.area.by.state.all <-
 Uncertainty in estimates of CH4 and CO2 emissions from reservoirs on land converted to flooded land were developed using IPCC Approach 2 and include uncertainty in the default emission factors and the flooded land area inventory (Table 1-105). Uncertainty in emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 to 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the flooded land area estimates is assumed and is based on expert judgment.
 
 #### <!--TABLE:: uncertainty-->
-```{r}
+```{r eval=FALSE}
 # need to add this table. It is currently rendered below
 
 
@@ -5301,7 +5287,7 @@ mf_theme(
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1))
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -5331,7 +5317,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -5415,7 +5401,7 @@ dev.off()
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.2023.co2.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -5445,7 +5431,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -5718,7 +5704,7 @@ mf_theme(
 # trying .png vector format here
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.pond.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -5752,7 +5738,7 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1)
 
 mf_inset_off()
@@ -5941,7 +5927,7 @@ lcfl.ocwb.area.state.all <- fl.cl.area.state.type %>%
 Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flooded land–other constructed water bodies include uncertainty in the default emission factors and the flooded land area inventory. Uncertainty in emission factors is provided in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in the NHD, NWI, NID, and NW are unknown, but uncertainty for remote sensing products is ±10 to 15 percent (IPCC 2003). EPA assumes an uncertainty of ± 15 percent for the flooded land area inventory based on expert judgment. These uncertainties do not include the underestimate of pond surface area discussed above. 
 
 #### <!--TABLE:: Uncertainty-->
-```{r}
+```{r eval=FALSE}
 # need to add this table. It is currently rendered below
 
 gt(ch4.co2.uncertainty.gt, 
