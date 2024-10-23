@@ -68,12 +68,12 @@ print(sessionInfo())
 # Alex Hall prepared the GIS data for the 1990-2023 inventory.  Data are
 # presented as a single layer in Flooded_Lands_090424.gpkg
 # st_layers("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg")
-st_layers("inputData/Flooded_Lands_090424.gpkg") # Flooded_Lands_2024
+st_layers("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg") # Flooded_Lands_2024
 # read first row
 # sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 #             query="select * from \"Flooded_Lands_2024\" limit 1") %>%
 #   print(n=Inf)
-sf::st_read("inputData/Flooded_Lands_090424.gpkg",
+sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
             query="select * from \"Flooded_Lands_2024\" limit 1") %>% # only first line
   print(n=Inf)
 
@@ -94,7 +94,7 @@ sf::st_read("inputData/Flooded_Lands_090424.gpkg",
 tic()
 # fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 #                    layer = "Flooded_Lands_2024") %>%
-fl.sf <- sf::st_read("inputData/Flooded_Lands_090424.gpkg",
+fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
                    layer = "Flooded_Lands_2024") %>%
   janitor::clean_names() %>%
   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
@@ -188,7 +188,7 @@ format(utils::object.size(fl.sf), units = "GB") #7.4 GB
 
 # SharePoint                          
 climate <- 
-  sf::st_read("inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
+  sf::st_read("~/shared/jbeaulie/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%
   # sf::st_read("~/shared/jbeaulie/inputData/climateMap", layer = "ipcc_zones_2017_names_dissolve") %>%  
   select(fldd_zn) %>% # pull out Flooded Lands climate zone
   rename(climate = fldd_zn) # rename
@@ -2241,6 +2241,29 @@ Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land rema
 
 ```{r}
 
+ch4.co2.uncertainty.gt <- ch4.co2.uncertainty.mean.table.total %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         type == "reservoir", year == 2022) %>%
+  select(contains("ch4")) %>%
+  pivot_longer(cols = contains("ch4"), names_to = "variable", values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "surface"), 
+                        "Surface", "Downstream")) %>%
+  filter(!str_detect(variable, "total")) %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.surface" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.surface" ~ "ch4_up_per", 
+         variable == "ch4.dn.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.dn.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.dn.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.dn" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.dn" ~ "ch4_up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(ch4_est, .before = ch4_min)
+  
+
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
@@ -2249,47 +2272,41 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
-             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
-             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
-             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
-  cols_add(Gas = "CH4", .before = year) %>%
+  cols_add(gas = "CH4", .before = ch4_est) %>%
+  cols_label(gas = "",
+             ch4_est = "", 
+             ch4_min = "Lower Bound", 
+             ch4_max = "Upper Bound", 
+             ch4_up_per = "Lower Bound", 
+             ch4_low_per = "Upper Bound") %>%
   rows_add(subtype = "Reservoir", .before = 1) %>%
-  tab_stubhead(label = "Source") %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
-  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
-              columns = 5:8, level = 2, id = "range") %>%
-  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
-  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
-  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
-  opt_vertical_padding(2) %>%
-  cols_align(align = "left") %>%
-  fmt_number() %>%
   sub_missing(missing_text = " ") %>%
+  fmt_number(decimals = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "Gas", columns = 2:2, level = 1) %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 4:7, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 4:5, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 6:7, level = 1) %>%
+  opt_horizontal_padding(2) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3, 
+    column_labels.border.bottom.style = "none", 
+    # column_labels.border.bottom.color = "black", 
+    # column_labels.border.bottom.width = 3, 
     stub.text_transform = "capitalize",
     stub.border.style = "none",
     footnotes.marks = "letters",
     grand_summary_row.border.style = "solid",
     grand_summary_row.border.color = "black",
     grand_summary_row.border.width = 3) %>%
-  grand_summary_rows(
+  grand_summary_rows(missing_text = "CH4",
     columns = where(is.numeric), 
     fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
-  text_replace(
-    locations = cells_stub(),
-    pattern = "surface",
-    replacement = "Surface Emissions") %>%  
-  text_replace(
-    locations = cells_stub(),
-    pattern = "downstream",
-    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
@@ -2299,11 +2316,13 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), cells_stubhead(), cells_column_spanners(),
-              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_grand_summary(), cells_stub_grand_summary(), 
               cells_stub(
                 rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
               cells_body(
                 rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+    tab_style( style = cell_text(v_align = "top"),
+             locations = cells_stubhead()) %>%
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
@@ -3687,75 +3706,80 @@ Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (
 ```{r}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
-gt(ch4.co2.uncertainty.gt, 
+ch4.co2.uncertainty.other.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         subtype != "reservoir", year == 2022) %>%
+ select(subtype, 
+         ch4_est = ch4.surface.mmt.co2.eq.y,
+          ch4_min = ch4.surface.mmt.co2.eq.y_min,
+          ch4_max = ch4.surface.mmt.co2.eq.y_max, 
+         ch4_low_per = lwr.perc.ch4.surface,  
+         ch4_up_per = upr.perc.ch4.surface)
+  
+
+gt(ch4.co2.uncertainty.other.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
-    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
-in Flooded Land Remaining Flooded Land")) %>% 
+    "Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other
+Constructed Waterbodies in Flooded Land Remaining Flooded Land")) %>% 
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
-             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
-             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
-             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
-  cols_add(Gas = "CH4", .before = year) %>%
-  rows_add(subtype = "Reservoir", .before = 1) %>%
-  tab_stubhead(label = "Source") %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
-  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
-              columns = 5:8, level = 2, id = "range") %>%
-  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
-  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
-  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
-  opt_vertical_padding(2) %>%
-  cols_align(align = "left") %>%
-  fmt_number() %>%
+  cols_add(gas = "CH4", .before = ch4_est) %>%
+  cols_label(gas = "",
+             ch4_est = "", 
+             ch4_min = "Lower Bound", 
+             ch4_max = "Upper Bound", 
+             ch4_low_per = "Lower Bound", 
+             ch4_up_per = "Upper Bound") %>%
   sub_missing(missing_text = " ") %>%
+  fmt_number(decimals = 1) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "Source", columns = 1:1, level = 1) %>%
+  tab_spanner(label = "Gas", columns = 2:2, level = 1) %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 4:7, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 4:5, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 6:7, level = 1) %>%
+  opt_horizontal_padding(2) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3, 
+    column_labels.border.bottom.style = "none", 
+    # column_labels.border.bottom.color = "black", 
+    # column_labels.border.bottom.width = 3, 
     stub.text_transform = "capitalize",
     stub.border.style = "none",
     footnotes.marks = "letters",
     grand_summary_row.border.style = "solid",
     grand_summary_row.border.color = "black",
     grand_summary_row.border.width = 3) %>%
-  grand_summary_rows(
+  grand_summary_rows(missing_text = "CH4",
     columns = where(is.numeric), 
     fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
-  text_replace(
-    locations = cells_stub(),
-    pattern = "surface",
-    replacement = "Surface Emissions") %>%  
-  text_replace(
-    locations = cells_stub(),
-    pattern = "downstream",
-    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
                              cells_row_groups(), cells_column_spanners(),
-                             cells_stub(1), 
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), cells_stubhead(), cells_column_spanners(),
-              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_grand_summary(), cells_stub_grand_summary(), 
               cells_stub(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+                rows = seq(2, nrow(ch4.co2.uncertainty.other.gt), by = 2)),
               cells_body(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+                rows = seq(2, nrow(ch4.co2.uncertainty.other.gt), by = 2)))) %>%
+  tab_style( style = cell_text(v_align = "top"),
+             locations = cells_stubhead()) %>%
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
-  
 ```
 
 
@@ -4854,75 +4878,102 @@ Uncertainty in estimates of CH4 and CO2 emissions from reservoirs on land conver
 # need to add this table. It is currently rendered below
 
 
-gt(ch4.co2.uncertainty.gt, 
+ch4.co2.uncertainty.converted.res.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "reservoir", year == 2022) %>%
+  select(-lu, -year, -contains("total")) %>%
+    pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "dn"), 
+                        "Downstream", "Surface")) %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+         variable == "ch4.dn.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.dn.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.dn.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.ch4.surface" ~ "low_per", 
+         variable == "upr.perc.ch4.surface" ~ "up_per", 
+         variable == "lwr.perc.ch4.dn" ~ "low_per", 
+         variable == "upr.perc.ch4.dn" ~ "up_per", 
+         variable == "co2.mmt.co2.eq.y" ~ "est",
+         variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+         variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.co2" ~ "low_per", 
+         variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min) %>%
+  arrange(desc(subtype))
+
+gt(ch4.co2.uncertainty.converted.res.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
-    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
-in Flooded Land Remaining Flooded Land")) %>% 
+    "Table 6-109: Approach 2 Quantitative Uncertainty Estimates for CH~4~ and CO~2~ Emissions from
+Reservoirs in Land Converted to Flooded Land")) %>% 
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
-             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
-             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
-             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
-  cols_add(Gas = "CH4", .before = year) %>%
-  rows_add(subtype = "Reservoir", .before = 1) %>%
-  tab_stubhead(label = "Source") %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
-  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
-              columns = 5:8, level = 2, id = "range") %>%
-  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
-  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
-  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
-  opt_vertical_padding(2) %>%
-  cols_align(align = "left") %>%
-  fmt_number() %>%
+  cols_label(Gas = "",
+             est = "", 
+             min = "Lower Bound", 
+             max = "Upper Bound", 
+             low_per = "Lower Bound", 
+             up_per = "Upper Bound") %>%
   sub_missing(missing_text = " ") %>%
+  sub_small_vals(threshold = 0.005499, small_pattern = "+") %>%
+  sub_zero(zero_text = "+") %>%
+  fmt_number(decimals = 2) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "Source", columns = 1, level = 1) %>%
+  tab_spanner(label = "Gas", columns = 2, level = 1, id = "gas") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 4:7, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 4:5, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 6:7, level = 1) %>%
+  opt_horizontal_padding(2) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3, 
-    stub.text_transform = "capitalize",
+    column_labels.border.bottom.style = "none", 
+    # column_labels.border.bottom.color = "black", 
+    # column_labels.border.bottom.width = 3, 
     stub.border.style = "none",
     footnotes.marks = "letters",
     grand_summary_row.border.style = "solid",
     grand_summary_row.border.color = "black",
     grand_summary_row.border.width = 3) %>%
-  grand_summary_rows(
+  grand_summary_rows(missing_text = " ",
     columns = where(is.numeric), 
     fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
-  text_replace(
-    locations = cells_stub(),
-    pattern = "surface",
-    replacement = "Surface Emissions") %>%  
-  text_replace(
-    locations = cells_stub(),
-    pattern = "downstream",
-    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
                              cells_row_groups(), cells_column_spanners(),
-                             cells_stub(1), 
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), cells_stubhead(), cells_column_spanners(),
-              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_grand_summary(), cells_stub_grand_summary(), 
               cells_stub(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+                rows = seq(2, nrow(ch4.co2.uncertainty.converted.res.gt), 
+                           by = 2)),
               cells_body(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+                rows = seq(2, nrow(ch4.co2.uncertainty.converted.res.gt), 
+                           by = 2)))) %>%
+  tab_style( style = cell_text(v_align = "top"),
+             locations = cells_stubhead()) %>%
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
+    tab_footnote(footnote = "+ Indicates values less than 0.05 MMT CO2 Eq.") %>%
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
-  
+
+
 ```
 
 ### QA/QC and Verification
@@ -5944,75 +5995,90 @@ Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flo
 ```{r}
 # need to add this table. It is currently rendered below
 
-gt(ch4.co2.uncertainty.gt, 
+ch4.co2.uncertainty.converted.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "freshwater pond", year == 2022) %>%
+  select(-lu, -year, -contains("total"), -contains("dn")) %>%
+  pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(subtype = "Freshwater ponds") %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.ch4.surface" ~ "low_per", 
+         variable == "upr.perc.ch4.surface" ~ "up_per", 
+         variable == "co2.mmt.co2.eq.y" ~ "est",
+         variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+         variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.co2" ~ "low_per", 
+         variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min)
+
+gt(ch4.co2.uncertainty.converted.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
-    "Table 6-86: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Reservoirs
-in Flooded Land Remaining Flooded Land")) %>% 
+    "Table 6-118: Approach 2 Quantitative Uncertainty Estimates for CH4 and CO2 Emissions from
+Other Constructed Waterbodies in Land Converted to Flooded Land")) %>% 
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
-             ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
-             ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
-             ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
-  cols_add(Gas = "CH4", .before = year) %>%
-  rows_add(subtype = "Reservoir", .before = 1) %>%
-  tab_stubhead(label = "Source") %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:4, level = 2) %>%
-  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
-              columns = 5:8, level = 2, id = "range") %>%
-  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:4, level = 1) %>%
-  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 5:6, level = 1) %>%
-  tab_spanner(label = "(%)", columns = 7:8, level = 1) %>%
-  opt_vertical_padding(2) %>%
-  cols_align(align = "left") %>%
-  fmt_number() %>%
+  cols_label(Gas = "",
+             est = "", 
+             min = "Lower Bound", 
+             max = "Upper Bound", 
+             low_per = "Lower Bound", 
+             up_per = "Upper Bound") %>%
   sub_missing(missing_text = " ") %>%
+  fmt_number(decimals = 2) %>%
+  tab_stubhead(label = "Source") %>%
+  tab_spanner(label = "Source", columns = 1, level = 1) %>%
+  tab_spanner(label = "Gas", columns = 2, level = 1, id = "gas") %>%
+  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
+              columns = 4:7, level = 2, id = "range") %>%
+  tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
+  tab_spanner(label = "(MMT CO2 Eq.) ", columns = 4:5, level = 1) %>%
+  tab_spanner(label = "(%)", columns = 6:7, level = 1) %>%
+  opt_horizontal_padding(2) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3, 
-    stub.text_transform = "capitalize",
+    column_labels.border.bottom.style = "none", 
+    # column_labels.border.bottom.color = "black", 
+    # column_labels.border.bottom.width = 3, 
     stub.border.style = "none",
     footnotes.marks = "letters",
     grand_summary_row.border.style = "solid",
     grand_summary_row.border.color = "black",
     grand_summary_row.border.width = 3) %>%
-  grand_summary_rows(
+  grand_summary_rows(missing_text = " ",
     columns = where(is.numeric), 
     fmt = ~ fmt_number(.), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
-  text_replace(
-    locations = cells_stub(),
-    pattern = "surface",
-    replacement = "Surface Emissions") %>%  
-  text_replace(
-    locations = cells_stub(),
-    pattern = "downstream",
-    replacement = "Downstream Emissions") %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
                              cells_row_groups(), cells_column_spanners(),
-                             cells_stub(1), 
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), cells_stubhead(), cells_column_spanners(),
-              cells_grand_summary(), cells_stub_grand_summary(),
+              cells_grand_summary(), cells_stub_grand_summary(), 
               cells_stub(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)),
+                rows = seq(2, nrow(ch4.co2.uncertainty.converted.gt), by = 2)),
               cells_body(
-                rows = seq(2, nrow(ch4.co2.uncertainty.gt), by = 2)))) %>%
+                rows = seq(2, nrow(ch4.co2.uncertainty.converted.gt), by = 2)))) %>%
+  tab_style( style = cell_text(v_align = "top"),
+             locations = cells_stubhead()) %>%
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
-               locations = cells_column_spanners(spanners = "range")) 
-  
+               locations = cells_column_spanners(spanners = "range")) %>%
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
+
 ```
 
 ### QA/QC and Verification
