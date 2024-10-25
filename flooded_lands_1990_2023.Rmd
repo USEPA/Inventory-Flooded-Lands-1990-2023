@@ -2240,6 +2240,28 @@ Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land rema
 
 ```{r}
 
+ch4.co2.uncertainty.gt <- ch4.co2.uncertainty.mean.table.total %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         type == "reservoir", year == 2023) %>%
+  select(contains("ch4")) %>%
+  pivot_longer(cols = contains("ch4"), names_to = "variable", values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "surface"), 
+                        "Surface", "Downstream")) %>%
+  filter(!str_detect(variable, "total")) %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.surface" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.surface" ~ "ch4_up_per", 
+         variable == "ch4.dn.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.dn.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.dn.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.dn" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.dn" ~ "ch4_up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(ch4_est, .before = ch4_min)
+
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
@@ -2248,7 +2270,7 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+  cols_label(ch4.surface.mmt.co2.eq.y_min = "State", 
              ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
              ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
              ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
@@ -3686,6 +3708,17 @@ Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (
 ```{r}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
+ch4.co2.uncertainty.other.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         subtype != "reservoir", year == 2022) %>%
+ select(subtype, 
+         ch4_est = ch4.surface.mmt.co2.eq.y,
+          ch4_min = ch4.surface.mmt.co2.eq.y_min,
+          ch4_max = ch4.surface.mmt.co2.eq.y_max, 
+         ch4_low_per = lwr.perc.ch4.surface,  
+         ch4_up_per = upr.perc.ch4.surface)
+
+
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
@@ -3694,7 +3727,7 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+  cols_label(ch4.surface.mmt.co2.eq.y_min = "State", 
              ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
              ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
              ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
@@ -4850,8 +4883,35 @@ Uncertainty in estimates of CH4 and CO2 emissions from reservoirs on land conver
 
 #### <!--TABLE:: uncertainty-->
 ```{r}
-# need to add this table. It is currently rendered below
 
+
+ch4.co2.uncertainty.converted.res.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "reservoir", year == 2022) %>%
+  select(-lu, -year, -contains("total")) %>%
+    pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "dn"), 
+                        "Downstream", "Surface")) %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+         variable == "ch4.dn.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.dn.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.dn.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.ch4.surface" ~ "low_per", 
+         variable == "upr.perc.ch4.surface" ~ "up_per", 
+         variable == "lwr.perc.ch4.dn" ~ "low_per", 
+         variable == "upr.perc.ch4.dn" ~ "up_per", 
+         variable == "co2.mmt.co2.eq.y" ~ "est",
+         variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+         variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.co2" ~ "low_per", 
+         variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min) %>%
+  arrange(desc(subtype))
 
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
@@ -4861,7 +4921,7 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+  cols_label(ch4.surface.mmt.co2.eq.y_min = "State", 
              ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
              ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
              ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
@@ -5941,7 +6001,27 @@ Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flo
 
 #### <!--TABLE:: Uncertainty-->
 ```{r}
-# need to add this table. It is currently rendered below
+ch4.co2.uncertainty.converted.gt <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "freshwater pond", year == 2022) %>%
+  select(-lu, -year, -contains("total"), -contains("dn")) %>%
+  pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(subtype = "Freshwater ponds") %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.ch4.surface" ~ "low_per", 
+         variable == "upr.perc.ch4.surface" ~ "up_per", 
+         variable == "co2.mmt.co2.eq.y" ~ "est",
+         variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+         variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+         variable == "lwr.perc.co2" ~ "low_per", 
+         variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min)
+
 
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
@@ -5951,7 +6031,7 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
-  cols_label(nh4.surface.mmt.co2.eq.y_min = "State", 
+  cols_label(ch4.surface.mmt.co2.eq.y_min = "State", 
              ch4.surface.mmt.co2.eq.y_max = "Surface Emissions", 
              ch4.dn.mmt.co2.eq.y_min = "Downstream Emissions", 
              ch4.dn.mmt.co2.eq.y_max = "Total Emissions") %>%
