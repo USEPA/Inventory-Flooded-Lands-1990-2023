@@ -15,7 +15,7 @@ code_folding: hide
 editor_options:
   chunk_output_type: console
 ---
-
+# <!--SETUP--!>
 ```{r setup, message=FALSE, include=FALSE}
 # Load libraries and print session info to facilitate reproducibility.  
 # This was run on DMAP memory intensive 16xLarge (64 cpus, 512GB) instance.
@@ -40,6 +40,7 @@ library(progressr) # future_map progress bar
 library(janitor)
 library(gt)
 library(gtExtras)
+library(lwgeom) # st_astext: extract spatial data from sf object
 
 library(conflicted) # manage MASS::select and dplyr::select conflict
 conflict_prefer("select", "dplyr")
@@ -68,14 +69,14 @@ print(sessionInfo())
 # Alex Hall prepared the GIS data for the 1990-2023 inventory.  Data are
 # presented as a single layer in Flooded_Lands_090424.gpkg
 # st_layers("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg")
-st_layers("inputData/Flooded_Lands_090424.gpkg") # Flooded_Lands_2024
+st_layers("inputData/FloodedLands2024.gpkg") # Flooded_Lands_2024
 # read first row
 # sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 #             query="select * from \"Flooded_Lands_2024\" limit 1") %>%
 #   print(n=Inf)
-sf::st_read("inputData/Flooded_Lands_090424.gpkg",
-            query="select * from \"Flooded_Lands_2024\" limit 1") %>% # only first line
-  print(n=Inf)
+# sf::st_read("inputData/FloodedLands2024.gpkg",
+#             query="select * from \"FloodedLands_LAGOS_202\" limit 1") %>% # only first line
+#   print(n=Inf)
 
 
 # Data were shared via OneDrive, downloaded to local clone of this 
@@ -94,14 +95,14 @@ sf::st_read("inputData/Flooded_Lands_090424.gpkg",
 tic()
 # fl.sf <- sf::st_read("~/shared/jbeaulie/inputData/Flooded_Lands_090424.gpkg",
 #                    layer = "Flooded_Lands_2024") %>%
-fl.sf <- sf::st_read("inputData/Flooded_Lands_090424.gpkg",
-                   layer = "Flooded_Lands_2024") %>%
+fl.sf <- sf::st_read("inputData/FloodedLands2024.gpkg",
+                   layer = "FloodedLands_LAGOS_2024") %>%
   janitor::clean_names() %>%
   st_sf() %>% # here rename doesn't work after clean_names, st_sf fixes whatever janitor broke
   rename(area_meters = intersect_area_meters,
          stusps = state_abr,
          climate = fldd_zn) 
-toc() # 167 seconds on laptop
+toc() # 444 seconds on laptop
 
 # subsample for fast knitting
 #fl.sf <- fl.sf %>% slice_sample(prop = 0.3)
@@ -110,10 +111,10 @@ table(st_geometry_type(fl.sf)) # all MULTIPOLYGON
 
 st_crs(fl.sf) # 9001, NAD83. In previous years we used 4326, WGS84
 fl.sf <- fl.sf %>% st_transform(4326)
-nrow(fl.sf) # 6,292,060
+nrow(fl.sf) # 6,291,174
 
 # Do all polygons have original area, new area, state and climate?
-# No, one observation with no areas and 42045 with no state.
+# Yes
 fl.sf %>% 
   st_drop_geometry() %>% # expedite calcs
   summarize(original.area.na = sum(is.na(original_area_meters)),
@@ -121,43 +122,10 @@ fl.sf %>%
             climate.na = sum(is.na(climate)),
             state.na = sum(is.na(stusps)))
 
-# OK, lets filter out observations with missing data for now
-fl.sf <-  fl.sf %>% 
-  filter(!(is.na(original_area_meters) | is.na(stusps) | is.na(climate)))  
-nrow(fl.sf) #6,250,008
- 
 # how many have dam construction year?
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
-  summarize(dam.n = sum(!is.na(dam_year_completed)), #18,708
-            sum(!is.na(dam_year_modified))) # 2,843 with dam_year_modified
-
-# convert dam_year_modified to `year`
-fl.sf <-  fl.sf %>% 
-  mutate(year = case_when(
-    # if dam_year_completed is known, then use dam_year_completed
-    !is.na(dam_year_completed) ~ dam_year_completed,
-    
-    # if dam_year_completed is not know, but dam_year_modified indicates dam was at least 20 years old
-    # in 1990 (beginning of time series), then use dam_year_modified. The result is that
-    # dam will be >20 years old throughout the time series
-    is.na(dam_year_completed) & dam_year_modified <= 1970 ~ dam_year_modified,
-    
-    # if dam_year_completed is not know, but dam_year_modified indicates the dam was modified sometime
-    # after 1970, lets set year to NA. My code will then assume the dam was built
-    # prior to 1970 and the system is > 20 years old throughout the time series.
-    # This will prevent a "new" dam from showing up in the time series based on 
-    # dam_year_modified when the dam has actually been in existence throughout the
-    # time series.
-    is.na(dam_year_completed) & dam_year_modified > 1970 ~ NA,
-    
-    # if no information, then NA
-    is.na(dam_year_completed) & is.na(dam_year_modified) ~ NA)) 
-
-# Now how many with an estimate of construction year?
-fl.sf %>% st_drop_geometry() %>% # expedite calcs
-  summarize(dam.n = sum(!is.na(year))) # 18,732
-
-
+  summarize(dam.n = sum(!is.na(year_completed)), #55,806
+            modified.n = sum(!is.na(years_modified))) # 5,007 with years_modified
 
 # Do all polygons have original area, new area, state and climate? YES!
 fl.sf %>% st_drop_geometry() %>% # expedite calcs
@@ -167,18 +135,91 @@ fl.sf %>% st_drop_geometry() %>% # expedite calcs
             state.na = sum(is.na(stusps)))
 
 
+format(utils::object.size(fl.sf), units = "GB") #9.4 GB
+```
+
+## <!--Fix Year of Dam Construction--!>
+```{r}
+## inspect years_modified and year_completed
+# both are character
+fl.sf %>% 
+  select(contains("year")) %>% 
+  str() # both are character
+table(fl.sf$year_completed, useNA = "ifany") # looks good
+table(fl.sf$years_modified, useNA = "ifany") # ok, multiple years for some rows.
+
+# Need to extract numeric values from years_modified, then select smallest value.
+# This represents earliest modification date
+fl.sf <- fl.sf %>% 
+  mutate(year_completed = as.numeric(year_completed),
+         years_modified = gsub('[ABCDEFGHIJKLMNOPQRSTUVWXYZ]', # remove any capital letters
+                               "", # replace with nothing
+                               years_modified)) %>% 
+  # now grab minimum years_modified value per row
+  #https://stackoverflow.com/questions/75096933/how-to-find-the-max-and-min-values-of-string-rows-of-a-dataframe-in-r
+  mutate(str_split(years_modified, ";") |> # split multiple observations based on ; separator. Dumps into list
+           map(as.numeric) |> # convert list elements to numeric
+           map(min) |> # select minimum value
+           map_dfr(setNames, "years_modified")) %>% # define variable name 
+  mutate(years_modified = replace(years_modified, 
+                                  years_modified %in% c(-1, 9999), # replace 9999 and -1
+                                  NA)) # with NA
+
+# double check results
+table(fl.sf$years_modified, useNA = "ifany")
+table(fl.sf$year_completed, useNA = "ifany")
+
+# Now that year_completed and years_modified are fixed, calculate best year value
+fl.sf <-  fl.sf %>% 
+  mutate(year = case_when(
+    # if year_completed is known, then use year_completed
+    !is.na(year_completed) ~ year_completed,
+    
+    # if year_completed is not know, but years_modified indicates dam was at least 20 years old
+    # in 1990 (beginning of time series), then use years_modified. The result is that
+    # dam will be >20 years old throughout the time series
+    is.na(year_completed) & years_modified <= 1970 ~ years_modified,
+    
+    # if year_completed is not know, but years_modified indicates the dam was modified sometime
+    # after 1970, lets set year to NA. My code will then assume the dam was built
+    # prior to 1970 and the system is > 20 years old throughout the time series.
+    # This will prevent a "new" dam from showing up in the time series based on 
+    # years_modified when the dam has actually been in existence throughout the
+    # time series.
+    is.na(year_completed) & years_modified > 1970 ~ NA_integer_,
+    
+    # if no information, then NA
+    is.na(year_completed) & is.na(years_modified) ~ NA_integer_,
+    TRUE ~ 999999999)) # check for this value as an error flag 
+
+# Now how many with an estimate of construction year?
+fl.sf %>% st_drop_geometry() %>% # expedite calcs
+  summarize(dam.n = sum(!is.na(year))) # 55,854.
+
+table(fl.sf$year)
+
 # select only needed columns
 names(fl.sf)
 fl.sf <- fl.sf %>% select(area_meters, original_area_meters,
                           nid_id, comid,
                           stusps, climate,
                           year,
-                          ditch)
-
-
-
-format(utils::object.size(fl.sf), units = "GB") #7.4 GB
+                          ditch,
+                          contains("chl"))
 ```
+
+## <!--Estimate 2021 - 2023 Chlorophyll--!>
+```{r}
+# LAGOS trophic status data run from 1990:2020. 
+# Assume 2021-2023 values are equal to 2020 values.
+fl.sf <- fl.sf %>%
+  mutate(chl_predicted_2021 = chl_predicted_2020,
+         chl_predicted_2022 = chl_predicted_2020,
+         chl_predicted_2023 = chl_predicted_2020)
+
+
+```
+
 ### <!--Area Representation-->
 #### <!--Climate-->
 <!--These features have been intersected with a layer of US state and territory boundaries (from USABoundaries package: inputData/us_states.shp) and the IPCC climate aggregated climate layer.  IPCC emission factors are aggregated into six climate zones.  The original 12 IPCC climate zones were aggregated per Table 7A.2 in Lovelock et al. Flooded Lands Methodology.  See C:\Users\JBEAULIE\OneDrive - Environmental Protection Agency (EPA)\Profile\Documents\Documents\research\IPCC\methodology2019\methodology2019.Rproj for details.-->
@@ -234,7 +275,7 @@ fl.sf <- fl.sf %>% select(-area_meters, -original_area_meters)
 ```{r guam, results="hide"}
 fl.sf <- fl.sf %>% filter(!(stusps %in% c("GU", "VQ")))
 table(fl.sf$stusps) # no GU or VQ, good
-nrow(fl.sf) # 6,535,897 down to 6,535,554
+nrow(fl.sf) # 6,291,174 down to 6,290,831
 ```
 
 
@@ -346,51 +387,52 @@ fl.sf %>% st_drop_geometry() %>%
   filter(!is.na(comid), type == "reservoir") %>%
   distinct(comid) %>%
     left_join(fl.sf) %>%
- summarise(n.nhd = n(), area.nhd = sum(area_ha_new)) #5,297 polygons, 1,800,016 ha
+ summarise(n.nhd = n(), area.nhd = sum(area_ha_new)) #5,192 polygons, 1,784,966 ha
 
 # NWI derived polygons
 fl.sf %>% st_drop_geometry() %>% 
   filter(!is.na(nid_id), type == "reservoir") %>%
   distinct(nid_id) %>%
   left_join(fl.sf) %>%
- summarise(n.nwi = n(), area.nwi = sum(area_ha_new)) #21,133 polygons; 5,506,226 hectares
+ summarise(n.nwi = n(), area.nwi = sum(area_ha_new)) #19,515 polygons; 4,800,776 hectares
 
 
 # write flooded land inventory to disk
 #st_write(fl.sf, "output/2023_Flooded_Lands_Inventory_Final_121923.gpkg", append = FALSE)
 ```
 
-### <!--Fabricate age data for freshwater ponds.-->
-<!--We need some numbers for freshwater ponds in LCFL to populate tables and figures. Just make something up until I can fix this with Alex-->
-```{r sim_age, results="hide"}
-fl.sf <- fl.sf %>%
-  mutate(year = case_when(subtype == "freshwater pond" ~ sample(1950:2020, size = n(), replace = TRUE), # random # between 1950 and 2020
-                          TRUE ~ year)) # else leave as is
-
-# # inspect results
-# fl.sf %>%
-#   st_drop_geometry() %>%
-#   filter(subtype == "freshwater pond") %>%
-#   {table(.$year, useNA = "ifany")}
-
-
-```
 
 ### <!--Set Up Time Series Infrastructure-->
 <!--Emissions/removals must be calculated for each year in the time series.  Reservoir age is extracted from NID.  When age not available we assume > 20.-->
 ```{r time_series, results="hide"}
-fl.df <- fl.sf %>% st_drop_geometry() # drop geometry to simplify things are reduce memory
-format(object.size(fl.df), units = "GB") # 1.1GB
-nrow(fl.df) # 6,535,554 good
+# add unique id to each polygon
+fl.sf <- fl.sf %>% tibble::rowid_to_column("unique_id")
+
+# grab spatial data for future use (about 2 minutes)
+fl.geom <- tibble(geom = lwgeom::st_astext(fl.sf), # extract geom to text.
+                  unique_id = fl.sf$unique_id)  #  add unique_id to facilitate merge later
+
+# drop geometry to simplify things are reduce memory
+fl.df <- fl.sf %>% st_drop_geometry() 
+format(object.size(fl.df), units = "GB") # 2.4GB
+nrow(fl.df) # 6,290,831 good
 
 # EACH YEAR AS LIST ELEMENT
 # Need to calculate emission separately for each year in time series
 # Put copy of data frame version sf object into 33 separate list elements.  Each element represents
 # one calculation year.
 fl <- map(.x = rep("fl.df", 34), .f = get) %>% # `get` will find all instances of X, map dumps into list
-  set_names(1990:2023)
+  set_names(1990:2023) %>%
+  # Each list element contains the full chl time series (e.g., 1984:2020).
+  # restrict to only the year needed for specific list element based on list element name
+  imap(~.x %>% 
+         select(names(.x)[!(grepl("chl", names(.x)) & !grepl(.y, names(.x)))])) %>% # retain year-specific chl
+  # strip "_year" from "chl_predicted_year" name
+  map(~.x %>%
+        rename_with(.fn = ~ sub('_\\d+$', '', .x), # replace terminal _ and subsequent characters with nothing
+              .cols = starts_with("chl"))) # apply to all columns containing "chl" (1 column per list element)
 
-format(object.size(fl), units = "auto") # 15.9 GB as dataframe!
+format(object.size(fl), units = "auto") # 19.2 GB as dataframe!
 
 # add calculation year as a column in each list element
 for (i in 1: length(fl)) { # do all elements simultaneously
@@ -401,7 +443,7 @@ for (i in 1: length(fl)) { # do all elements simultaneously
 # Calculate waterbody age for each calculation year
 # More recent years should have more waterbodies due to recent construction.
 # First, how many records per list element now
-lapply(fl, function(x) nrow(x)) #6,535,554 rows
+lapply(fl, function(x) nrow(x)) # 6,290,831 rows
 
 # with list elements as dataframes.  
 # lapply takes 1.5 min
@@ -430,7 +472,7 @@ with_progress({ # add progress bar
 })
 toc()
 
-lapply(fl, function(x) nrow(x)) #6,535,554 rows
+lapply(fl, function(x) nrow(x)) #6,290,831 in 2023, fewer in earlier years, good
 
 
 
@@ -486,6 +528,15 @@ if (all(n.row.prior == map_dbl(fl.e, function(x) nrow(x)))) {
   print("STOP, ERROR MERGING EFs")
 }
 
+# Modify EF to account for chlorophyll
+fl.e <- map(fl.e, ~ .x %>%
+              # mutate(ch4.tonnes.ha.y = case_when(subtype == "reservoir" & chl_predicted < 2.6 ~ ch4.tonnes.ha.y * 0.7,
+              #                                    subtype == "reservoir" & chl_predicted > 2.6 & chl_predicted <= 20 ~ ch4.tonnes.ha.y * 3,
+              #                                    subtype == "reservoir" & chl_predicted > 20 & chl_predicted <= 56 ~ ch4.tonnes.ha.y * 10,
+              #                                    subtype == "reservoir" & chl_predicted > 56 ~ ch4.tonnes.ha.y * 25,
+              #                                    TRUE ~ ch4.tonnes.ha.y)) %>%
+              select(-contains("chl"))) # removing so code below doesn't break
+
 # Calculate emissions
 # Downstream emissions are calculated as 9% of surface emissions.
 tic() # 35 seconds
@@ -506,9 +557,35 @@ toc()
 map_dbl(fl.e, ~sum(.x$ch.dn.tonnes.y == 99999999)) # no 99999999, GOOD!
 ```
 
-# <!--Uncertainty analysis-->
+### <!--Write .gpkg for gridded data product-->
+```{r, eval=FALSE, results="hide"}
 
-## <!--Define distributions for EFs-->
+imap(fl.e[as.character(2012:2020)], ~ .x %>% 
+       #slice_sample(., n=600) %>% # subsample for practice
+       left_join(., fl.geom) %>% #
+  sf::st_as_sf(wkt = "geom", crs = 4326) %>%
+      select(climate, area_ha_new, name, lu, type, subtype, ch4.total.tonnes.y) %>%
+      st_write(dsn = "output/flooded_lands_.gpkg", layer = .y, append = FALSE))
+
+# check resulting .gpkg
+st_layers("output/flooded_lands_.gpkg")
+
+# inspect 2020 as an example
+fl_2020 <- st_read(dsn = "output/flooded_lands_.gpkg", layer = "2020")
+
+# compares perfectly to number in report
+fl_2020 %>%
+  st_drop_geometry %>%
+  group_by(lu, subtype) %>%
+  summarize(ch4_tot = sum(ch4.total.tonnes.y/1000))
+
+
+```
+
+
+## <!--Uncertainty analysis-->
+
+### <!--Define distributions for EFs-->
 ```{r rd}
 # Read in raw data used to calculate Rd value used in methodology
 rd <- readxl::read_excel("inputData/ipccDegassingReview.xlsx", sheet = "summary")
@@ -568,7 +645,7 @@ summary(sim0.085)
 
 ```
 
-## <!--Simulations-->
+### <!--Simulations-->
 
 ```{r error_sim}
 # Read in emission factors
@@ -684,7 +761,7 @@ length(fl.error.sim.type) # 20,000 elements
 ```
 
 
-## <!--Table:: Uncertainty-->
+### <!--Table:: Uncertainty-->
 ```{r error_tables}
 
 
@@ -950,7 +1027,7 @@ ch4.co2.uncertainty.mean.table.total %>%
 
 ```
 
-## <!--Tables: A. Data-->
+### <!--Tables: A. Data-->
 <!--Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.-->
 ```{r error_appendix}
 # 1990 first---------------
@@ -1029,8 +1106,8 @@ A.Data.2023.export <- A.Data.2023 %>%
 
 
 
-### <!--Aggretate as needed-->
-#### <!--Set up a few things-->
+## <!--Aggretate as needed-->
+### <!--Set up a few things-->
 ```{r, results="hide"}
 # We want all states to have an area value for each type (res, pond, ditch), even
 # if the value is 0.  Create a full matrix of type by state for joining with area calculations.
@@ -1052,7 +1129,7 @@ full.state.type.grid <- expand.grid(types, st_crosswalk_no_GU_VQ$name) %>%
   rename(type = Var1, name = Var2) 
 ```
 
-##### <!--All Flooded Land Surface Area and EFs by state, climate, type, subtype, and lu-->
+### <!--All Flooded Land Surface Area and EFs by state, climate, type, subtype, and lu-->
 <!--This is written out to state specific tabs in Excel file.  See 'Write to Excel' section.-->
 ```{r, results="hide"}
 # updated for 1990_2023
@@ -1092,7 +1169,7 @@ unique(fl.cl.area.state.type$type) # no FLY YOU FOOLS, so good!
 
 ```
 
-##### <!--Flooded Land Remaining Flooded Land CH4 flux National Summary Table By subtype and Flux Type-->
+### <!--Flooded Land Remaining Flooded Land CH4 flux National Summary Table By subtype and Flux Type-->
 <!--This table is written 7.3.1_FLRFL_summary tab of Excel document in "Write to Excel" section below.  Does not appear in text.-->
 ```{r, results="hide"}
 # updated for 1990-2023
@@ -1152,7 +1229,7 @@ unique(flrfl.ch4.national.subtype$flux.type) # no "oops!", good
 ```
 
 
-##### <!--Land Converted to Flooded Land GHG flux National Summary Table By subtype and Flux Type-->
+### <!--Land Converted to Flooded Land GHG flux National Summary Table By subtype and Flux Type-->
 <!--This table is written to 7.3.2_LCFL_summary tab of Excel document  in "Write to Excel" section below.  Does not appear in text.-->
 ```{r, results="hide"}
 
@@ -1227,6 +1304,17 @@ lcfl.ghg.national.subtype <- lcfl.ghg.national.subtype.l %>%
 unique(lcfl.ghg.national.subtype$flux.type) # no "oops!", good
 unique(lcfl.ghg.national.subtype$gas) # no "oops!", good
 unique(lcfl.ghg.national.subtype$units) # no "oops!", good
+```
+
+## <!--Temporary code to evaluate trophic status adjustment impact-->
+```{r ts_effect, eval=FALSE}
+
+ch4.2023 <- fl.e$`2023` %>%
+  group_by(lu, subtype) %>%
+  summarize(tot_ch4 = sum(ch4.total.tonnes.y)/1000)
+
+write_csv(ch4.2023, "output/2023_ch4_without_ts_adjustment.csv")
+
 ```
 
 ## <!--Write to Excel-->
