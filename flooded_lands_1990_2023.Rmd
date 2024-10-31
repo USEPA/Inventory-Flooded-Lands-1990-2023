@@ -141,7 +141,7 @@ format(utils::object.size(fl.sf), units = "GB") #9.4 GB
 ```
 
 ## <!--Fix Year of Dam Construction--!>
-```{r}
+```{r fix_year, results="hide"}
 ## inspect years_modified and year_completed
 # both are character
 fl.sf %>% 
@@ -206,20 +206,7 @@ fl.sf <- fl.sf %>% select(area_meters, original_area_meters,
                           nid_id, comid,
                           stusps, climate,
                           year,
-                          ditch,
-                          contains("chl"))
-```
-
-## <!--Estimate 2021 - 2023 Chlorophyll--!>
-```{r}
-# LAGOS trophic status data run from 1990:2020. 
-# Assume 2021-2023 values are equal to 2020 values.
-fl.sf <- fl.sf %>%
-  mutate(chl_predicted_2021 = chl_predicted_2020,
-         chl_predicted_2022 = chl_predicted_2020,
-         chl_predicted_2023 = chl_predicted_2020)
-
-
+                          ditch)
 ```
 
 
@@ -437,15 +424,7 @@ nrow(fl.df) # 6,290,831 good
 # Put copy of data frame version sf object into 33 separate list elements.  Each element represents
 # one calculation year.
 fl <- map(.x = rep("fl.df", 34), .f = get) %>% # `get` will find all instances of X, map dumps into list
-  set_names(1990:2023) %>%
-  # Each list element contains the full chl time series (e.g., 1984:2020).
-  # restrict to only the year needed for specific list element based on list element name
-  imap(~.x %>% 
-         select(names(.x)[!(grepl("chl", names(.x)) & !grepl(.y, names(.x)))])) %>% # retain year-specific chl
-  # strip "_year" from "chl_predicted_year" name
-  map(~.x %>%
-        rename_with(.fn = ~ sub('_\\d+$', '', .x), # replace terminal _ and subsequent characters with nothing
-              .cols = starts_with("chl"))) # apply to all columns containing "chl" (1 column per list element)
+  set_names(1990:2023)
 
 format(object.size(fl), units = "auto") # 19.2 GB as dataframe!
 
@@ -551,14 +530,6 @@ if (all(n.row.prior == map_dbl(fl.e, function(x) nrow(x)))) {
   print("STOP, ERROR MERGING EFs")
 }
 
-# Modify EF to account for chlorophyll
-fl.e <- map(fl.e, ~ .x %>%
-              # mutate(ch4.tonnes.ha.y = case_when(subtype == "reservoir" & chl_predicted < 2.6 ~ ch4.tonnes.ha.y * 0.7,
-              #                                    subtype == "reservoir" & chl_predicted > 2.6 & chl_predicted <= 20 ~ ch4.tonnes.ha.y * 3,
-              #                                    subtype == "reservoir" & chl_predicted > 20 & chl_predicted <= 56 ~ ch4.tonnes.ha.y * 10,
-              #                                    subtype == "reservoir" & chl_predicted > 56 ~ ch4.tonnes.ha.y * 25,
-              #                                    TRUE ~ ch4.tonnes.ha.y)) %>%
-              select(-contains("chl"))) # removing so code below doesn't break
 
 # Calculate emissions
 # Downstream emissions are calculated as 9% of surface emissions.
@@ -609,7 +580,7 @@ fl_2020 %>%
 ## <!--Uncertainty analysis-->
 
 ### <!--Define distributions for EFs-->
-```{r rd}
+```{r rd, results="hide", fig.show="hide"}
 # Read in raw data used to calculate Rd value used in methodology
 rd <- readxl::read_excel("inputData/ipccDegassingReview.xlsx", sheet = "summary")
 names(rd) = gsub(pattern = c("\\(| |#|)|/|-|\\+"),
@@ -670,7 +641,7 @@ summary(sim0.085)
 
 ### <!--Simulations-->
 
-```{r error_sim}
+```{r error_sim, results="hide"}
 # Read in emission factors
 ef.error <- readxl::read_excel("inputData/defaultEmissionFactors.xlsx") %>%
   # 95% CI EF for ponds is asymmetrical around the mean, causing the 95% CI
@@ -786,7 +757,7 @@ length(fl.error.sim.type) # 20,000 elements
 ### <!--Table:: Uncertainty-->
 
 
-```{r error_tables}
+```{r error_tables, results="hide"}
 
 
 # STEP 1: COLLAPSE LIST INTO DF
@@ -1055,7 +1026,7 @@ ch4.co2.uncertainty.mean.table.total %>%
 
 <!--Table in Excel file.  Output from Monte Carlo simulations.  Ideally we would provide activity data (area) and EFs, but the EFs are unique for each of the >7 million waterbodies in the Inventory.  Instead, we are providing emission outputs for each land-use (LCFL, FLRFL), subtype (canal/ditch, reservoir, pond), gas (CH4, CO2), and emission mechanism (surface, downstream, total).  Data are written to Excel and formulas in cells B5:V10 will populate those cells.-->
 
-```{r error_appendix}
+```{r error_appendix, results="hide"}
 # 1990 first---------------
 A.Data.1990.l <- fl.error.sim.subtype[names(fl.error.sim.subtype) == "1990"] # subset all "1990" results from list
 
@@ -1337,16 +1308,6 @@ unique(lcfl.ghg.national.subtype$gas) # no "oops!", good
 unique(lcfl.ghg.national.subtype$units) # no "oops!", good
 ```
 
-## <!--Temporary code to evaluate trophic status adjustment impact-->
-```{r ts_effect, eval=FALSE}
-
-ch4.2023 <- fl.e$`2023` %>%
-  group_by(lu, subtype) %>%
-  summarize(tot_ch4 = sum(ch4.total.tonnes.y)/1000)
-
-write_csv(ch4.2023, "output/2023_ch4_without_ts_adjustment.csv")
-
-```
 
 ## <!--Write to Excel-->
 
@@ -1644,14 +1605,14 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
 
 
 # Puerto Rico
-mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.06, 0.2)) # Where is the inset on the map?
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.02, 0.2)) # Where is the inset on the map?
 # display the target municipality
 mf_map(pr, var = "climate", type = "typo",
        border = NA, # don't include outline of climate zone
@@ -1682,36 +1643,36 @@ mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
 # close the inset
 mf_inset_off()
 
-# # Add Alaska
-# mf_inset_on(x = alaska, fig = c(.02,.3,.08,0.42)) #c(X1,X2,Y1,Y2)
-# mf_map(alaska, var = "climate", type = "typo",
-#        border = NA, # don't include outline of climate zone
-#        pal = alaska$color,
-#        leg_pos = NA)
-# mf_map(x = alaska.lines,
-#        type = "base",
-#        col = "black",
-#        add = TRUE,
-#        lwd = 2)
-# mf_map(alaska.fl,
-#        type = "base",
-#        col = "black",
-#        add = TRUE)
-# 
-# # Title inset?
-# mf_title("Alaska", 
-#          bg = NA,
-#          pos = "center",
-#          tab = TRUE,
-#          cex = 1.5,
-#          line = 1,
-#          inner = TRUE)
-# 
-# # Scale Bar
-# mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-#          cex = 1.5)
-# 
-# mf_inset_off()
+# Add Alaska
+mf_inset_on(x = alaska, fig = c(.02,.3,.08,0.42)) #c(X1,X2,Y1,Y2)
+mf_map(alaska, var = "climate", type = "typo",
+       border = NA, # don't include outline of climate zone
+       pal = alaska$color,
+       leg_pos = NA)
+mf_map(x = alaska.lines,
+       type = "base",
+       col = "black",
+       add = TRUE,
+       lwd = 2)
+mf_map(alaska.fl,
+       type = "base",
+       col = "black",
+       add = TRUE)
+
+# Title inset?
+mf_title("Alaska",
+         bg = NA,
+         pos = "center",
+         tab = TRUE,
+         cex = 1.5,
+         line = 1,
+         inner = TRUE)
+
+# Scale Bar
+mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
+
+mf_inset_off()
 
 # Add Map Title
 # mf_title("Climate Zones of the U.S.",cex = 2)
@@ -1744,7 +1705,7 @@ Table 6-80 and Table 6-81 below summarize nationally aggregated CH~4~ emissions 
 
 ### <!--TABLE::  CH~4~ Emissions from Flooded Land Remaining Flooded Land—Reservoirs-->
 
-Total CH~4~ emissions from reservoirs in FLRFL are shown in the text in both kt CH~4~ and MMT CH~4~-CO~2~-eq. These tables are knit into the document below, but are also calculated in the "tables" tab of the Excel spreadsheet. Double check against Excel to confirm calculations.
+<!--Total CH~4~ emissions from reservoirs in FLRFL are shown in the text in both kt CH~4~ and MMT CH~4~-CO~2~-eq. These tables are knit into the document below, but are also calculated in the "tables" tab of the Excel spreadsheet. Double check against Excel to confirm calculations.-->
 
 ```{r}
 # PERFECT MATCH TO EXCEL TABLE.  HOORAY!!!!
@@ -1998,14 +1959,14 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
 
 
 # Puerto Rico
-mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.08, 0.2)) # Where is the inset on the map?
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.02, 0.2)) # Where is the inset on the map?
 # display the target municipality
 mf_map(pr, var = "ch4.total.ktonnes.y", type = "typo",
        border = "black", # state borders
@@ -2022,7 +1983,7 @@ mf_title("Puerto Rico",
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -2243,7 +2204,7 @@ Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Cens
 
 [^6]: See <https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html>.
 
-The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2022 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
+The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2023 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
 ###### <!--TABLE:: National Flooded Land Area for Reservoirs-->
 
@@ -2872,7 +2833,7 @@ mf_theme(
 # 5. MAKE CANALS AND DITCHES MAP---------------
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.ditch.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 
@@ -2908,12 +2869,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -2932,12 +2893,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -2956,13 +2917,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -2970,7 +2931,7 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
-val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_canals_and_ditches), -1), by = 1)
+val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_canals_and_ditches), -1), by = 25)
 pal.legend <- scales::rescale(val.legend)
 
 mf_legend(type = "choro", pos = "left",
@@ -2987,7 +2948,7 @@ mf_title(txt = expression(A.~CH[4]~Emissions~from~Ditches~and~Canals),
          bg = NA,
          line = 2, # required to get full title to fit in plot space
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -2997,7 +2958,7 @@ dev.off()
 # 6. MAKE PONDS MAP-------------------------
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.pond.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # for .png
@@ -3016,7 +2977,7 @@ mf_map(conus,
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -3033,12 +2994,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3057,12 +3018,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -3081,13 +3042,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3095,15 +3056,15 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
-# val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state$ktonnes_ch4_freshwater_pond), -1), by = 1)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = expression(kt~CH[4]~y^-1),
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0, round(max(us.plot.flrfl.ch4.2023.ocwb.state.gt$ktonnes_ch4_freshwater_pond), -1), by = 5)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(kt~CH[4]~y^-1),
+          val_cex = 1, title_cex = 1.25)
 mf_inset_off()
 
 # Add Map Title
@@ -3112,7 +3073,7 @@ mf_title(txt = expression(B.~CH[4]~Emissions~from~Freshwater~Ponds),
          bg = NA,
          line = 2, # required to get full title to fit in plot space
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -3199,92 +3160,7 @@ NWI features were considered “managed” if they had a special modifier value 
 
 Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed.” The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control.
 
-Canals and ditches, a subset of other constructed waterbodies, were identified in the NWI by their morphology. Unlike a natural water body, canals and ditches are typically narrow, linear features with abrupt angular turns. Figure 6-14 contrasts the unique shape of ditches/canals vs more natural water features.
-
-###### <!--FIGURE: NWI features identified as canals/ditches-->
-
-**Figure 6-14: Left: NWI Features Identified as Canals/Ditches (pink) by Unique Narrow, Linear/Angular Morphology. Right: Non-Canal/Ditches with More Natural Morphology (blue)**
-
-```{r}
-# Load and render figure in markdown
-knitr::include_graphics("inputData/NWI_canal_not_canal.png")
-
-```
-
-This morphology was identified systematically using shape attributes in a decision tree model. A training set of 752 features were identified as either “ditch” or “not ditch” using expert judgment. The training set was used to train a decision tree which was used to categorize millions of NWI features based on three shape attribute ratios (Figure 6-12).
-
-###### <!--TABLE: Predictors used in Decision Tree to Identify Canal/Ditches-->
-
-```{r}
-predictors.gt <- tibble(Predictor = c("Shape Length : # of Shape Vertices",
-                     "Shape Area : Shape Length",
-                     "Shape Area : # of Shape Vertices")) 
-    # Create GT table of data
-gt(predictors.gt) %>%
-  tab_header(title = md(
-    "Table 6-91: Predictors used in Decision Tree to Identify Canal/Ditches")) %>%
-  #cols_label(subtype = "Surface Area (millions of ha)") %>%
-  #sub_missing(missing_text = " ") %>%
-  #fmt_number (decimals = 1) %>%
-  tab_options(
-    heading.border.bottom.style = "solid", 
-    heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3) %>%
-  tab_style(style = cell_fill(color = "lightgray"),
-          locations = list(
-            cells_column_labels(), 
-            cells_body(
-              rows = seq(2, nrow(predictors.gt), by = 2)))) %>%
-  tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), 
-                             cells_column_labels()))
-```
-
-The decision tree built a model using 80 percent of the 752 training features and used the 20 percent to validate the model. The model was 93.1 percent accurate. Below are the validation results (Table 6-92).
-
-###### <!--TABLE: Validation Results for Ditch/Canal Classification Decision Tree-->
-
-```{r}
-# needs "Truth" header obove the 2nd and 3rd columns.
-validation.gt <- tribble(~Prediction, ~`Ditch/Canal`, ~`Not Ditch/Canal`,
-        "Ditch/Canal", 49,          5,
-        "Not Ditch/Canal", 8,       27) 
-
-    # Create GT table of data
-gt(validation.gt) %>%
-  tab_header(title = md(
-    "Table 6-92: Predictors used in Decision Tree to Identify Canal/Ditches")) %>%
-  tab_options(
-    heading.border.bottom.style = "solid", 
-    heading.border.bottom.color = "black",
-    column_labels.border.bottom.style = "solid", 
-    column_labels.border.bottom.color = "black", 
-    column_labels.border.bottom.width = 3) %>%
-  tab_style(style = cell_fill(color = "lightgray"),
-          locations = list(
-            cells_column_labels(), 
-            cells_body(
-              rows = seq(2, nrow(validation.gt), by = 2)))) %>%
-  tab_style(style = cell_text(weight = "bold", color = "black"), 
-            locations = list(cells_title(), 
-                             cells_column_labels()))
-
-```
-
-The decision tree model was then applied to the entire NWI dataset using the following shape attribute ratios (Figure 6-15).
-
-###### <!--FIGURE: Canals/Ditch Decision Tree Structure-->
-
-**Figure 6-15: Structure of Decision Tree Used to Identify Canals/Ditches**
-
-```{r}
-
-# Load and render figure in markdown
-knitr::include_graphics("inputData/decision_tree_structure.png")
-
-```
+Canals and ditches, a subset of other constructed waterbodies, were identified in the NWI by their attribute codes. The following NWI attribute codes were interpretted as canals.ditches: R5UBFx, R2UBFx, R2UBHx, R4SBCx, PEM1Cx
 
 Surface areas for other constructed waterbodies were taken from NHD, NWI or the NW. If features from the NHD, NWI, or the NW datasets overlapped, these areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies.
 
@@ -3458,6 +3334,7 @@ pr <- us.plot.flrfl.ocwb.area %>%
   filter(name == "Puerto Rico") %>%
   st_transform(crs = 32619)
 
+
 # 4. CREATE MAP THEME-----------------------
 mf_theme(
   #bg = "#a19e9d", 
@@ -3471,7 +3348,7 @@ mf_theme(
 # .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.ditch.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -3484,7 +3361,7 @@ mf_map(conus,
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -3501,12 +3378,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3525,12 +3402,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -3549,13 +3426,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3563,16 +3440,16 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
-# val.legend <-  seq(0, round(max(us.plot.flrfl.ocwb.area$`canals and ditches`), -4), # round to nearest 10,000
-#                    by = 10000)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = "hectares",
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0, round(max(us.plot.flrfl.ocwb.area$`canals and ditches`), -4), # round to nearest 10,000
+                   by = 50000)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = "hectares",
+          val_cex = 1, title_cex = 1.25)
 mf_inset_off()
 
 # Add Map Title
@@ -3581,7 +3458,7 @@ mf_title(txt = expression(A.~Area~of~Ditches~and~Canals),
          bg = NA,
          line = 2, # required to get full title to fit in plot space
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -3592,7 +3469,7 @@ dev.off()
 # .png vector format works, but DMAP won't render a view.  Must download to local computer, then view.
 mf_export(x = conus,
           filename = "output/figures/FLRFL.ocwb.pond.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -3605,7 +3482,7 @@ mf_map(conus,
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -3622,12 +3499,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3646,12 +3523,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -3670,13 +3547,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -3684,26 +3561,26 @@ mf_inset_off()
 # Add legend
 mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
-# val.legend <-  seq(0, 
-#                    round(max(us.plot.flrfl.ocwb.area$`freshwater pond`), -5), # round max value to nearest 100,000
-#                    by = 50000)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = "hectares",
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0,
+                   round(max(us.plot.flrfl.ocwb.area$`freshwater pond`), -5), # round max value to nearest 100,000
+                   by = 50000)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = "hectares",
+          val_cex = 1, title_cex = 1.5)
 mf_inset_off()
 
 # Add Map Title
-mf_title(txt = expression(B.~Area~Freshwater~Ponds), 
+mf_title(txt = expression(B.~Area~of~Freshwater~Ponds), 
          pos = "left",
          bg = NA,
          line = 2, # required to get full title to fit in plot space
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -3804,11 +3681,8 @@ flrfl.canal.area.by.state.all <- fl.cl.area.state.type %>%
 ```
 
 ###### <!--TABLE:: Flooded Land Area for Other Constructed Waterbodies-freshwater ponds by State: abbreviated time series-->
-
-```{=html}
 <!--This table appears only in text.  It is not in main spreadsheet.
 Compare total row to FLRFL.ocwb.area.national-->
-```
 ```{r}
 flrfl.pond.area.by.state.gt <- fl.cl.area.state.type %>%
   filter(subtype == "freshwater pond",
@@ -4152,14 +4026,14 @@ mf_title("Hawaii",
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
          cex = 1.5)
 
 mf_inset_off()
 
 
 # Puerto Rico
-mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.06, 0.2)) # Where is the inset on the map?
+mf_inset_on(x = pr, fig = c(0.65, 0.77, 0.02, 0.2)) # Where is the inset on the map?
 # display the target municipality
 mf_map(pr, var = "climate", type = "typo",
        border = NA, # don't include outline of climate zone
@@ -4230,10 +4104,10 @@ mf_inset_off()
 
 mf_inset_on(us, fig = c(0,0.3,0.45,0.9))
 
-# mf_legend(type = "typo", pos = "left",
-#           val = cz.colors$zone, pal = cz.colors$color,
-#           title = "Climate Zone",
-#           val_cex = 1.5, title_cex = 2)
+mf_legend(type = "typo", pos = "left",
+          val = cz.colors$zone, pal = cz.colors$color,
+          title = "Climate Zone",
+          val_cex = 1.5, title_cex = 2)
 mf_inset_off()
 
 dev.off()
@@ -4518,7 +4392,7 @@ mf_theme(
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.reservoir.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1))
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -4529,7 +4403,7 @@ mf_map(conus, var = "name", type = "typo",
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -4544,12 +4418,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -4567,12 +4441,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -4590,28 +4464,28 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
 # Add legend
 mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
 
-# val.legend <-  seq(0, round(max(us.plot.lcfl.ghg.2023.reservoir$ch4.total.ktonnes.y), digits = 0), by = 1)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = expression(kt~CH[4]~y^-1),
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0, round(max(us.plot.lcfl.ghg.2023.reservoir$ch4.total.ktonnes.y), digits = 0), by = 1)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(kt~CH[4]~y^-1),
+          val_cex = 1, title_cex = 1.5)
 mf_inset_off()
 
 # Add Map Title
@@ -4620,7 +4494,7 @@ mf_title(txt = expression(A.~CH[4]~Emissions~from~Reservoirs),
          bg = NA,
          line = 2,
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -4631,7 +4505,7 @@ dev.off()
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.reservoir.2023.co2.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -4642,7 +4516,7 @@ mf_map(conus, var = "name", type = "typo",
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -4657,12 +4531,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -4680,12 +4554,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -4703,13 +4577,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -4717,17 +4591,17 @@ mf_inset_off()
 mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
 
 
-# val.legend <-  seq(0, 
-#                    round(max(us.plot.lcfl.ghg.2023.reservoir$co2.ktonnes.y), digits = -2), # round to nearest 100
-#                    by = 50)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = expression(kt~CO[2]~y^-1),
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0,
+                   round(max(us.plot.lcfl.ghg.2023.reservoir$co2.ktonnes.y), digits = -2), # round to nearest 100
+                   by = 25)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(kt~CO[2]~y^-1),
+          val_cex = 1.25, title_cex = 1.5)
 mf_inset_off()
 
 
@@ -4737,7 +4611,7 @@ mf_title(txt = expression(B.~CO[2]~Emissions~from~Reservoirs),
          bg = NA,
          line = 2,
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -5662,7 +5536,7 @@ mf_theme(
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.2023.Tch4.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1))
+          width = 1200, expandBB = c(.3,.3,0.1,.1))
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -5673,7 +5547,7 @@ mf_map(conus, var = "name", type = "typo",
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -5688,12 +5562,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -5711,12 +5585,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -5734,28 +5608,28 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
 # Add legend
 mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
 
-# val.legend <-  seq(0, round(max(us.plot.lcfl.ocwb.ghg.state.2023$ch4.total.tonnes.co2.eq.y_freshwater_pond), digits = -2), by = 125)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# # mf_legend(type = "choro", pos = "left",
-# #           val = val.legend, 
-# #           pal = pal.blues(pal.legend), # range of palette
-# #           val_rnd = 0,
-# #           title = expression(tonnes~CO[2]~Eq.~y^-1),
-# #           val_cex = 1, title_cex = 1.1)
+val.legend <-  seq(0, round(max(us.plot.lcfl.ocwb.ghg.state.2023$ch4.total.tonnes.co2.eq.y_freshwater_pond), digits = -2), by = 100)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(tonnes~CO[2]~Eq.~y^-1),
+          val_cex = 1.25, title_cex = 1.5)
 mf_inset_off()
 
 # Add Map Title
@@ -5764,7 +5638,7 @@ mf_title(txt = expression(A.~CH[4]~Emissions~from~Freshwater~Ponds),
          bg = NA,
          line = 2,
          inner = TRUE,
-         cex = 1.25)
+         cex = 2)
 
 dev.off()
 
@@ -5775,7 +5649,7 @@ dev.off()
 
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.2023.co2.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # original width = 1200, shrinking to accommodate 2 panels
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -5786,7 +5660,7 @@ mf_map(conus, var = "name", type = "typo",
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -5801,12 +5675,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -5824,12 +5698,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -5847,13 +5721,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -5861,17 +5735,17 @@ mf_inset_off()
 mf_inset_on(us, fig = c(0,0.3,0.3,0.95))
 
 
-# val.legend <-  seq(0, 
-#                    round(max(us.plot.lcfl.ocwb.ghg.state.2023$co2.tonnes.y_freshwater_pond), digits = -2), # round to nearest 100
-#                    by = 125)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = expression(tonnes~CO[2]~y^-1),
-#           val_cex = 1, title_cex = 1.25)
+val.legend <-  seq(0,
+                   round(max(us.plot.lcfl.ocwb.ghg.state.2023$co2.tonnes.y_freshwater_pond), digits = -2), # round to nearest 100
+                   by = 100)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = expression(tonnes~CO[2]~y^-1),
+          val_cex = 1.25, title_cex = 1.5)
 mf_inset_off()
 
 
@@ -5881,7 +5755,7 @@ mf_title(txt = expression(B.~CO[2]~Emissions~from~Freshwater~Ponds),
          bg = NA,
          line = 2,
          inner = TRUE,
-         cex = 1.1)
+         cex = 2)
 
 dev.off()
 
@@ -6094,7 +5968,7 @@ mf_theme(
 # trying .png vector format here
 mf_export(x = conus,
           filename = "output/figures/LCFL.ocwb.pond.2023.area.png",
-          width = 7, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
+          width = 1200, expandBB = c(.3,.3,0.1,.1)) # (bottom, left, top, right)
 #mf_shadow(cs, add = TRUE,col = "grey50")
 
 # CONUS
@@ -6107,7 +5981,7 @@ mf_map(conus,
        leg_pos = NA)
 # Scale Bar
 mf_scale(size = 500, pos = "bottomright", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 mf_inset_off()
 
 
@@ -6124,12 +5998,12 @@ mf_title("Hawaii",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
-mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+mf_scale(size = 500, pos = "bottomleft", scale_units = "mi",
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -6148,12 +6022,12 @@ mf_title("Puerto Rico",
          bg = NA,
          pos = "left",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 # Scale Bar
 mf_scale(size = 100, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 # close the inset
 mf_inset_off()
@@ -6172,13 +6046,13 @@ mf_title("Alaska",
          bg = NA,
          pos = "center",
          tab = TRUE,
-         cex = 1,
+         cex = 1.5,
          line = 1,
          inner = TRUE)
 
 # Scale Bar
 mf_scale(size = 1000, pos = "bottomleft", scale_units = "mi",
-         cex = 1)
+         cex = 1.5)
 
 mf_inset_off()
 
@@ -6188,14 +6062,14 @@ mf_inset_on(us, fig = c(0.02,0.3,0.3,0.95))
 
 val.legend <-  seq(0, round(max(us.plot.lcfl.ocwb.area$freshwater_pond), -2), # round to nearest 100
                    by = 25)
-# pal.legend <- scales::rescale(val.legend)
-# 
-# mf_legend(type = "choro", pos = "left",
-#           val = val.legend, 
-#           pal = pal.blues(pal.legend), # range of palette
-#           val_rnd = 0,
-#           title = "hectares",
-#           val_cex = 1, title_cex = 1.25)
+pal.legend <- scales::rescale(val.legend)
+
+mf_legend(type = "choro", pos = "left",
+          val = val.legend,
+          pal = pal.blues(pal.legend), # range of palette
+          val_rnd = 0,
+          title = "hectares",
+          val_cex = 1.25, title_cex = 1.5)
 mf_inset_off()
 
 # # Add Map Title
