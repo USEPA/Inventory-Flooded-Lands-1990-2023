@@ -15,7 +15,7 @@ code_folding: hide
 editor_options:
   chunk_output_type: console
 ---
-# <!--SETUP--!>
+# <!--SETUP-->
 ```{r setup, message=FALSE, include=FALSE}
 # Load libraries and print session info to facilitate reproducibility.  
 # This was run on DMAP memory intensive 16xLarge (64 cpus, 512GB) instance.
@@ -140,7 +140,7 @@ fl.sf %>% st_drop_geometry() %>% # expedite calcs
 format(utils::object.size(fl.sf), units = "GB") #9.4 GB
 ```
 
-## <!--Fix Year of Dam Construction--!>
+## <!--Fix Year of Dam Construction-->
 ```{r fix_year, results="hide"}
 ## inspect years_modified and year_completed
 # both are character
@@ -277,11 +277,10 @@ nrow(fl.sf) # 6,291,174 down to 6,290,831
 
 #### <!--Preview Polygon-->
 
-```{=html}
 <!--Navigation layer polygons were compared to NWI polygons and any overlap removed from navigation layer.  In many instances this converted the original navigation polygon into many smaller polygons, all sharing a common comid value.  Polygon were further divided by the intersection with climate and state polygon.  For example, COMID == 120049697 is a Mississippi River impoundment that was split into `r fl.sf %>% filter(comid == 120049697) %>% nrow()` individual polygons.  The cumulative area of the 131 polygons is equal to the area of the original polygon before intersecting with state and climate, but after removing NWI overlap areas:
 
 WHY IS THIS POLYGON ABSENT!!-->
-```
+
 ```{r preview_polygon, message=FALSE, warning=FALSE, results="hide"}
 # area after removing NWI overlap, but before intersection with state and climate
 # fl.sf %>% st_drop_geometry() %>% filter(comid == 120049697) %>% distinct(area_ha_original)
@@ -1432,13 +1431,13 @@ Flooded lands are defined as water bodies where human activities have 1) caused 
 
 Flooded lands are broadly classified as “reservoirs” or “other constructed waterbodies” (IPCC 2019). Other constructed waterbodies include canals/ditches and ponds (flooded land \<8 ha surface area). Reservoirs are defined as flooded land greater than 8 ha. IPCC guidance (IPCC 2019) provides default emission factors for reservoirs, ponds, and canals/ditches.
 
-Land that has been flooded for greater than 20 years is defined as flooded land remaining flooded land and land flooded for 20 years or less is defined as land converted to flooded land. The distinction is based on literature reports that CH~4~ and CO~2~ emissions are high immediately following flooding, but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005; Barros et al. 2011; Teodoru et al. 2012). Emissions of CH~4~ are estimated for flooded land remaining flooded land, but CO~2~ emissions are not included as they are 6-126 Inventory of U.S. Greenhouse Gas Emissions and Sinks: 1990–2023 primarily the result of decomposition of organic matter entering the waterbody from the catchment or contained in inundated soils and are captured in Chapter 6, Land Use, Land-Use Change, and Forestry.
+Land that has been flooded for greater than 20 years is defined as flooded land remaining flooded land and land flooded for 20 years or less is defined as land converted to flooded land. The distinction is based on literature reports that CH~4~ and CO~2~ emissions are high immediately following flooding but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005; Barros et al. 2011; Teodoru et al. 2012). Emissions of CH~4~ are estimated for flooded land remaining flooded land, but CO~2~ emissions are not included as they are primarily the result of decomposition of organic matter entering the waterbody from the catchment or contained in inundated soils and are captured in Chapter 6, Land Use, Land-Use Change, and Forestry.
 
 Nitrous oxide emissions from flooded lands are largely related to input of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting of N~2~O emissions which are captured in other source categories, such as indirect N~2~O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge).
 
 ## Emissions from Flooded Land Remaining Flooded Land-Reservoirs
 
-Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In 2023, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2023) %>% summarize(tot.area = sum(.)) %>% pull() / 1000000` million hectares of reservoirs in the flooded land remaining flooded land category. These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)(IPCC 2019).
+Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In 2023, the United States and Puerto Rico contained `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2023) %>% summarize(tot.area = sum(.) / 1000000) %>% pull() %>% round(., 1)` million hectares of reservoirs in the flooded land remaining flooded land category. These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull() %>% round(., 1)` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)(IPCC 2019).
 
 ### <!--FIGURE: Climate zone and Flooded lands map-->
 
@@ -1856,9 +1855,35 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
 
 ```
 
-Methane emissions from reservoirs in Texas, Florida, and Louisiana (Figure 6-11, Table 6-82) compose 34 percent of national CH~4~ emissions from reservoirs in 2022. Emissions from these states are particularly high due to 1) the large expanse of reservoirs in these states (Table 6-85) and 2) the high CH~4~ emission factor for the tropical dry/montane and topical moist climate zones which encompass a majority of the flooded land area in these states (Figure 6-10, Table 6-83).
 
-Methane emissions from reservoirs in flooded land remaining flooded land increased 6.4 percent from 1990 to 2022 due to the matriculation of reservoirs in land converted to flooded land to flooded land remaining flooded land.
+```{r tx_fl_la_ch4}
+# calculate proportion of total attributed to texas, florida, and louisiana. This object is called in in-line code in paragraph immediately below
+
+tx_fl_la_prop_ch4 <- 
+  ( # capture quotient in ()
+    ( # open numerator
+      fl.e$`2023` %>%  
+        filter(type == "reservoir",
+               lu == "Flooded Land Remaining Flooded Land") %>%
+        select(name, ch4.total.tonnes.y) %>%
+        group_by(name) %>%
+        summarize(ch4.total.tonnes.y = sum(ch4.total.tonnes.y)) %>% 
+        ungroup() %>%
+        filter(name %in% c("Texas", "Florida", "Louisiana")) %>%
+        summarize(ch4.tot = sum(ch4.total.tonnes.y)) %>% pull()
+    ) / # close numerator
+      ( # open denominator
+        flrfl.ch4.national.subtype.kt.ch4.gt %>%
+          summarize(ch4.total.tonnes.y = sum(`2023`) * 1000) %>%
+          pull()
+      ) # close denominator
+  ) * # close quotient
+  100 # multiply by 100 to convert to percent
+```
+
+Methane emissions from reservoirs in Texas, Florida, and Louisiana (Figure 6-11, Table 6-82) compose `r round(tx_fl_la_prop_ch4, 1)` percent of national CH~4~ emissions from reservoirs in 2023. Emissions from these states are particularly high due to 1) the large expanse of reservoirs in these states (Table 6-85) and 2) the high CH~4~ emission factor for the tropical dry/montane and topical moist climate zones which encompass a majority of the flooded land area in these states (Figure 6-10, Table 6-83).
+
+Methane emissions from reservoirs in flooded land remaining flooded land increased `r ((( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x2023) * 1000) %>% pull() ) / ( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x1990) * 1000) %>% pull() ) ) - 1) %>% "*"(100) %>% round(1)` percent from 1990 to 2023 due to the matriculation of reservoirs in land converted to flooded land to flooded land remaining flooded land.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
@@ -2102,13 +2127,7 @@ gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
   tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") 
 
 
-# TX, FL, LA proportion of total for text
-# Ideally this would be coded as inline code above.
-# flrfl.ch4.2022.reservoir.state %>% 
-#   ungroup() %>%
-#   filter(name %in% c("Texas", "Florida", "Louisiana")) %>%
-#   summarize(ch4.tot = sum(ch4.total.ktonnes.y)) %>% pull() /
-#   sum(flrfl.ch4.2022.reservoir.state$ch4.total.ktonnes.y) 
+
 
 
 ```
@@ -2186,7 +2205,7 @@ EPA assumes that all features included in the NW network are subject to water-le
 NWI features were considered “managed” if they had a Special Modifier value indicating the presence of management activities (Figure 6-12). To be included in the flooded lands inventory, the managed flooded land had to be wet or saturated for at least one season per year (see “Water Regime” in Figure 6-12). NWI features that met these criteria, were greater than 8 ha in surface area, and were not a canal/ditch (see emissions from land converted to flooded land – other constructed waterbodies) were defined as reservoirs.
 
 ###### <!--FIGURE: NWI Criteria-->
-
+**Figure 6-12: Selected Features from NWI that Meet Flooded Lands Criteria**
 ```{r}
 # insert NWI table
 knitr::include_graphics("inputData/NWI_criteria.png")
@@ -2204,7 +2223,7 @@ Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Cens
 
 [^6]: See <https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html>.
 
-The surface area of reservoirs in flooded land remaining flooded land increased by approximately `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2023 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
+The surface area of reservoirs in flooded land remaining flooded land increased by `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2022"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2022 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2023 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
 ###### <!--TABLE:: National Flooded Land Area for Reservoirs-->
 
@@ -2348,7 +2367,7 @@ flrfl.area.reservoir.state.all <-
 
 ##### Uncertainty
 
-Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the 2019 Refinement to the 2006 IPCC Guidelines (IPCC 2019). The CH~4~ emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO~2~ emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
+Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land remaining flooded land (Table 6-86) are developed using Monte Carlo simulations (IPCC Approach 2) and include uncertainty in the default emission factors and land areas. Each iteration of the simulation draws surface and downstream emission factors from a statistical distribution based on the mean and variance in the *2019 Refinement to the 2006 IPCC Guidelines* (IPCC 2019). The CH~4~ emission factors for surface and downstream emissions are modeled using normal and lognormal distributions, respectively. The 2019 IPCC Refinement does not contain sufficient information to define a normal distribution for the CO~2~ emission factor and a uniform distribution bounded by the 95% confidence internal of the mean is assumed. Uncertainties in the spatial data include 1) uncertainty in area estimates from the NHD, NWI, and NW, and 2) uncertainty in the location of dams in the NID and drinking water intakes in SDWIS. Overall uncertainties in these spatial datasets are unknown, but uncertainty for remote sensing products is assumed to be ± 10 - 15 percent based on IPCC guidance (IPCC 2003). An uncertainty range of ± 15 percent for the reservoir area estimates is assumed and is based on expert judgment. Each iteration of the simulation draws a surface area for each waterbody from a uniform distribution bounded by ± 15 percent of the estimated surface area.
 
 ```{r}
 
@@ -2450,16 +2469,49 @@ The National Hydrography Data (NHD) is managed by the USGS in collaboration with
 General QA/QC procedures were applied to activity data, documentation, and emission calculations consistent with the U.S. Inventory QA/QC plan, which is in accordance with Vol. 1 Chapter 6 of the 2006 IPCC Guidelines (see Annex 8 for more details). All calculations were executed independently in Excel and R. Ten percent of state and national totals were randomly selected for comparison between the two approaches to ensure there were no computational errors.
 
 ##### Recalculations Discussion
+```{r recalculations, results="hide"}
+flrfl.ch4.reservoir.national.current.inventory <- flrfl.ch4.national.subtype %>% 
+  filter(subtype == "reservoir", flux.type == "total") %>% 
+  select(-(`2023`), -Activity, -subtype, -flux.type)
 
-The EPA's SDWIS is a new data source used in the current (1990 through 2022) Inventory. The assumption is that any waterbody used as a public drinking water source is managed in some capacity - by flow and/or volume control. This data source added 418 reservoirs totaling 736,344 ha.
+flrfl.ch4.reservoir.national.previous.inventory <- readxl::read_xlsx(path = "inputData/FloodedLands-Output_90-22_07Nov2023.xlsx", sheet = "7.3.1_FLRFL_summary", range = "C13:AI14")
 
-The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current Inventory contains 47 new dams and updated values for “year of dam completion” for 975 dams relative to the previous (1990 through 2021) Inventory data. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current Inventory has major updates for MS, ND, NM, and MT.
 
-The net effect of these recalculations was an average annual increase in CH~4~ emission estimates from reservoirs of 1.23 MMT CO~2~ Eq., or 4 percent, over the time series from 1990 to 2021 compared to the previous Inventory.
+# Calculate mean percent decrease in ch4 emissions
+mean.change.perc <- 
+  (flrfl.ch4.reservoir.national.current.inventory / 
+     flrfl.ch4.reservoir.national.previous.inventory) %>%
+  rowwise() %>% # rowwise operation
+  mutate(mean_prop = mean( # calculate mean proportion
+    c_across(everything() # across all columns (years)
+    ))) %>% 
+  select(mean_prop) %>%
+  mutate(prop_decrease = 1-mean_prop) %>%
+  pull(prop_decrease) %>%
+  "*" (100) %>%
+  round(.,1)
+
+
+# Calculate mean change in ch4 emissions
+mean.change.abs <- (flrfl.ch4.reservoir.national.current.inventory - 
+    flrfl.ch4.reservoir.national.previous.inventory) %>%
+  rowwise() %>% 
+  mutate(mean_change = mean(c_across(everything())),
+         mean_change_abs = abs(mean_change),
+         mean_change_abs_mmtco2eq = (mean_change_abs / 1000) * 28) %>% 
+  pull(abs(mean_change_abs_mmtco2eq))
+  
+
+```
+-NID updates  
+-NWI updates  
+-wait until age has been verified  
+
+The net effect of these recalculations was an average annual decrease in CH~4~ emission estimates from reservoirs of `r  round(mean.change.abs, 2)` MMT CO2 Eq., or `r mean.change.perc` percent, over the time series from 1990 to 2022 compared to the previous *Inventory*.
 
 ##### Planned Improvements
 
-The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.[^7] The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 Inventory submission.
+The EPA recently completed a survey of greenhouse gas emissions from 108 reservoirs in the conterminous United States.[^7] The data will be used to develop country-specific emission factors for U.S. reservoirs to be used in the 1990 through 2024 *Inventory* submission.
 
 [^7]: See <https://www.epa.gov/air-research/research-emissions-us-reservoirs>.
 
@@ -2469,7 +2521,7 @@ The IPCC (IPCC 2019) provides emission factors for several types of “other con
 
 Canals and ditches (terms are used interchangeably) are linear water features constructed to transport water (i.e., stormwater drainage, aqueduct), to irrigate or drain land, to connect two or more bodies of water, or to serve as a waterway for watercraft. The geometry and construction of canals and ditches varies widely and includes narrow earthen channels (\<1 m wide) and concrete lined aqueducts in excess of 50 m wide. Canals and ditches can be extensive in many agricultural, forest and settlement areas, and may also be significant sources of emissions in some circumstances.
 
-Methane emissions from freshwater ponds in flooded land remaining flooded land increased by approximately `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2022") %>% pull()) * 100` percent from 1990 to 2022. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
+Methane emissions from freshwater ponds in flooded land remaining flooded land increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2023") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2023") %>% pull()) %>% "*"(100) %>% round(1)` percent from 1990 to 2023. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
 
 ### <!--TABLE:: National level CH~4~ flux table-->
 
@@ -2625,7 +2677,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
 
 ```
 
-Florida and Louisiana have the greatest methane emissions from canals and ditches in the United States (Figure 6-13, Table 6-89). Presumably, most of these canals serve to drain the extensive wetland complexes in these states (Davis, 1973). California has the third greatest methane emissions from canals and ditches. Canals and ditches in California primarily serve to convey water from the mountains to urban and agricultural areas. Michigan and Minnesota have the fourth and fifth largest methane emissions from canals and ditches. These systems serve to drain historic wetlands to facilitate row-crop agriculture. Texas, Florida, and Georgia have the greatest methane emissions from freshwater ponds, although states throughout the eastern United States make significant contributions to the national total. These patterns of emissions are in accordance with the distribution of other constructed waterbodies in the United States.
+Florida has the greatest methane emissions from canals and ditches in the United States (Figure 6-13, Table 6-89). Presumably, most of these canals serve to drain the extensive wetland complexes in the state (Davis, 1973). Michigan and Ohio have the second and third greatest methane emissions from canals and ditches. These systems serve to drain historic wetlands to facilitate row-crop agriculture. Texas, Florida, and Georgia have the greatest methane emissions from freshwater ponds, although states throughout the eastern United States make significant contributions to the national total. These patterns of emissions are in accordance with the distribution of other constructed waterbodies in the United States.
 
 ### <!--TABLE:: State level CH~4~ flux table-->
 
@@ -3093,7 +3145,7 @@ cat('
 
 ### Methodology and Time-Series Consistency
 
-Estimates of CH~4~ emissions for other constructed waterbodies in flooded land remaining flooded Land follow the Tier 1 methodology in IPCC (2019). All calculations are performed at the state level and summed to obtain national estimates. Based on IPCC guidance, methane emissions from the surface of these flooded lands are calculated as the product of flooded land surface area and an emission factor (Table 6-90). Although literature data on greenhouse gas emissions from canals and ditches is relatively sparse, they have the highest default emission factor of all flooded land types (Table 6-90). Default emission factors for freshwater ponds are on the higher end of those for reservoirs. There are insufficient data to support climate-specific emission factors for ponds or canals and ditches. Downstream emissions are not inventoried for other constructed waterbodies because 1) many of these systems are not associated with dams (e.g., excavated ponds and ditches), and 2) there are insufficient data to derive downstream emission factors for other constructed waterbodies that are associated with dams (IPCC 2019).
+Estimates of CH~4~ emissions for other constructed waterbodies in flooded land remaining flooded Land follow the Tier 1 methodology in IPCC (2019). All calculations are performed at the state level and summed to obtain national estimates. Based on IPCC guidance, CH~4~ emissions from the surface of these flooded lands are calculated as the product of flooded land surface area and an emission factor (Table 6-90). Although literature data on greenhouse gas emissions from canals and ditches is relatively sparse, they have the highest default emission factor of all flooded land types (Table 6-90). Default emission factors for freshwater ponds are on the higher end of those for reservoirs. There are insufficient data to support climate-specific emission factors for ponds or canals and ditches. Downstream emissions are not inventoried for other constructed waterbodies because 1) many of these systems are not associated with dams (e.g., excavated ponds and ditches), and 2) there are insufficient data to derive downstream emission factors for other constructed waterbodies that are associated with dams (IPCC 2019).
 
 #### <!--TABLE: default emission factors-->
 
@@ -3142,15 +3194,17 @@ gt(ef.gt.2) %>%
 
 ##### Area Estimates
 
-Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),[^8] the National Inventory of Dams (NID), the National Wetlands Inventory (NWI),[^9] the Navigable Waterways (NW) network,[^10] and the EPA’s Safe Drinking Water Information System (SDWIS).[^11] The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, District of Columbia, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI.
+Other constructed waterbodies were identified from the NHDWaterbody layer in the National Hydrography Dataset Plus V2 (NHD),[^8] the National Inventory of Dams (NID),[^9] the National Wetlands Inventory (NWI),[^10] the Navigable Waterways (NW) network,[^11] and the EPA’s Safe Drinking Water Information System (SDWIS).[^12] The NHD only covers the conterminous United States, whereas the NID, NW and NWI also include Alaska, Hawaii, District of Columbia, and Puerto Rico. The following paragraphs present the criteria used to identify other constructed waterbodies in the NHD, NW, and NWI.
 
 [^8]: See <https://www.usgs.gov/core-science-systems/ngp/national-hydrography>.
 
 [^9]: See <https://nid.sec.usace.army.mil>.
 
-[^10]: See <https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about>.
+[^10]: See <https://www.fws.gov/program/national-wetlands-inventory/data-download>.
 
-[^11]: See <https://www.epa.gov/enviro/sdwis-overview>. Not publicly available due to security concerns.
+[^11]: See <https://hifld-geoplatform.opendata.arcgis.com/maps/aaa3767c7d2b41f69e7528f99cf2fb76_0/about>.
+
+[^12]: See <https://www.epa.gov/enviro/sdwis-overview>. Not publicly available due to security concerns.
 
 Waterbodies in the NHDWaterbody layer that were greater than 20-years old, less than 8 ha in surface area, not identified as canal/ditch in NHD, and met any of the following criteria were considered freshwater ponds in flooded land remaining flooded land: 1) the waterbody was classified “Reservoir” in the NHDWaterbody layer, 2) the waterbody name in the NHDWaterbody layer included “Reservoir”, 3) the waterbody in the NHDWaterbody layer was located in close proximity (up to 100 m) to a dam in the NID, 4) the NHDWaterbody GNIS name was similar to nearby NID feature (between 100 m to 1000 m), the waterbody intersected a drinking water intake.
 
@@ -3160,13 +3214,13 @@ NWI features were considered “managed” if they had a special modifier value 
 
 Any NWI or NHD feature that intersected a drinking water intake point from SDWIS was assumed to be “managed.” The rational being that a waterbody used as a source for public drinking water is typically managed in some capacity - by flow and/or volume control.
 
-Canals and ditches, a subset of other constructed waterbodies, were identified in the NWI by their attribute codes. The following NWI attribute codes were interpretted as canals.ditches: R5UBFx, R2UBFx, R2UBHx, R4SBCx, PEM1Cx
+Canals and ditches, a subset of other constructed waterbodies, were identified in the NWI by their attribute codes. The following NWI attribute codes were interpreted as canals/ditches: R5UBFx, R2UBFx, R2UBHx, R4SBCx, PEM1Cx.
 
 Surface areas for other constructed waterbodies were taken from NHD, NWI or the NW. If features from the NHD, NWI, or the NW datasets overlapped, these areas were erased. The first step was to take the final NWI flooded lands features and use it to identify overlapping NHD features. If the NHD feature had its center in a NWI feature, it was removed from analysis. Next, remaining NHD features were erased from any remaining overlapping NWI features. Final selections of NHD and NWI features were used to erase any overlapping NW waterbodies.
 
 The age of other constructed waterbody features was determined by assuming the waterbody was created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series. No canal/ditch features were associated with a nearby dam, therefore all canal/ditch features were assumed to be greater than 20-years old through the time series.
 
-For the year 2022, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull()` ha of canals and ditches in flooded land remaining flooded land. The surface area of freshwater ponds increased by `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` ha from 1990 to 2022 due to flooded lands matriculating from land converted to flooded land to flooded land remaining flooded land. All canals and ditches were assumed to be greater than 20-years old throughout the time series, thus the surface area of these flooded lands is constant throughout the time series.
+For the year 2023, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of canals and ditches in flooded land remaining flooded land. The surface area of freshwater ponds increased by `r (fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull) %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha from 1990 to 2023 due to flooded lands matriculating from land converted to flooded land to flooded land remaining flooded land. All canals and ditches were assumed to be greater than 20-years old throughout the time series, thus the surface area of these flooded lands is constant throughout the time series.
 
 ###### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies: abbreviated time series-->
 
@@ -3235,7 +3289,7 @@ gt(flrfl.ocwb.area.national.gt %>%
 
 ```
 
-Canals and ditches in the conterminous United States are most abundant in the Gulf Coast states and California (Figure 6-16A, Table ). Florida contains 19 percent of all U.S. canal and ditch surface area, most of which were constructed in the early 1900s for drainage, flood protection, and water storage purposes. Freshwater ponds are more widely distributed across the United States (Figure 6-16B, Table 6-95). Texas has the greatest surface area of freshwater ponds, equivalent to 8 percent of all freshwater pond surface area in the United States, closely followed by Florida.
+
 
 ###### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies: full time series-->
 
@@ -3266,7 +3320,7 @@ flrfl.ocwb.area.national.all <- fl.cl.area.state.type %>%
 
 ```
 
-Canals and ditches in the conterminous U.S. are most abundant in the Gulf Coast states and California (Fig. x-xxA.). FLorida contains `r fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land", name == "Florida") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all US canals and ditches. Texas has the greatest surface area of freshwater ponds, equivalent to `r fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land", name == "Texas") %>% summarize(area2022 = sum(area2022)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2022 = sum(area2022)) %>% pull()` percent of all freshwater pond surface area in the United States, closely followed by Florida.
+Canals and ditches in the conterminous U.S. are most abundant in the Gulf Coast states and California (Fig. 6-16A.). Florida contains `r (fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land", name == "Florida") %>% summarize(area2023 = sum(area2023)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "canals and ditches", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2023 = sum(area2023)) %>% pull()) %>% "*"(100) %>% round(1)` percent of all U.S. canals and ditch surface area, most of which were constructed in the early 1900s for drainage, flood protection, and water storage purposes. Texas has the greatest surface area of freshwater ponds, equivalent to `r (fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land", name == "Texas") %>% summarize(area2023 = sum(area2023)) %>% pull() / fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Flooded Land Remaining Flooded Land") %>% summarize(area2023 = sum(area2023)) %>% pull()) %>% "*"(100) %>% round(1)` percent of all freshwater pond surface area in the United States, closely followed by Florida.
 
 ###### <!--FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State-->
 
@@ -3853,25 +3907,69 @@ gt(ch4.co2.uncertainty.other.gt,
 
 The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID.[^12]. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
 
-[^12]: CITATION NEEDED
+[^12]: See <https://nid.sec.usace.army.mil>.
 
 General QA/QC procedures were applied to activity data, documentation, and emission calculations consistent with the U.S. Inventory QA/QC plan, which is in accordance with Vol. 1 Chapter 6 of 2006 IPCC Guidelines (see Annex 8 for more details). All calculations were executed independently in Excel and R. Ten percent of state and national totals were randomly selected for comparison between the two approaches to ensure there were no computational errors.
 
 ### Recalculations Discussion
+```{r recalculations_flrfl_ocwb, results="hide"}
+# flrfl/ocwb emissions in current inventory: 1990-2022 
+flrfl.ch4.ocwb.national.current.inventory <- 
+  flrfl.ch4.national.subtype %>% 
+  filter(subtype %in% c("freshwater pond", "canals and ditches"), 
+         flux.type == "total") %>% 
+  select(-Activity, -subtype, -flux.type, -`2023`) %>%
+  summarise(across(everything(), sum))
 
-The EPA's SDWIS is a new data source used in the current (1990 through 2022) *Inventory*. The assumption is that any waterbody used as a public drinking water source is managed in some capacity—by flow and/or volume control. This data source added 54 features totaling 173 ha of other constructed waterbodies.
+# flrfl/ocwb emissions in previous inventory: 1990-2022
+flrfl.ch4.ocwb.national.previous.inventory <- 
+  readxl::read_xlsx(
+    path = "inputData/FloodedLands-Output_90-22_07Nov2023.xlsx", 
+    sheet = "7.3.1_FLRFL_summary", 
+    range = "C17:AI20",
+    col_names = as.character(1990:2022)) %>%
+  slice(c(1,4)) %>%
+  summarise(across(everything(), sum))
+  
 
-The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current (1990 through 2022) *Inventory* contains 47 new dams and updated values for “year of dam completion” for 975 dams relative to the previous (1990 through 2021) Inventory data. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current *Inventory* has major updates for MS, ND, NM, and MT.
 
-The net effect of these recalculations was an average annual decrease in CH~4~ emission estimates from other constructed waterbodies of 2.7 MMT CO~2~ Eq., or 17 percent, over the time series from 1990 to 2021 compared to the previous *Inventory*.
+# Calculate mean percent decrease in ch4 emissions
+mean.change.perc <- 
+  (flrfl.ch4.ocwb.national.current.inventory / 
+     flrfl.ch4.ocwb.national.previous.inventory) %>%
+  rowwise() %>% # rowwise operation
+  mutate(mean_prop = mean( # calculate mean proportion
+    c_across(everything() # across all columns (years)
+    ))) %>% 
+  select(mean_prop) %>%
+  mutate(prop_decrease = 1-mean_prop) %>%
+  pull(prop_decrease) %>%
+  "*" (100) %>%
+  round(.,1)
+
+
+# Calculate mean change in ch4 emissions
+mean.change.abs <- (flrfl.ch4.ocwb.national.current.inventory - 
+    flrfl.ch4.ocwb.national.previous.inventory) %>%
+  rowwise() %>% 
+  mutate(mean_change = mean(c_across(everything())),
+         mean_change_abs = abs(mean_change),
+         mean_change_abs_mmtco2eq = (mean_change_abs / 1000) * 28) %>% 
+  pull(abs(mean_change_abs_mmtco2eq))
+  
+
+```
+
+<!--NID updates
+NWI updates
+wait until age has been verified and Okeechobee has been fixed-->
+
+The net effect of these recalculations was an average annual decrease in CH~4~ emission estimates from reservoirs of `r  round(mean.change.abs, 2)` MMT CO2 Eq., or `r mean.change.perc` percent, over the time series from 1990 to 2022 compared to the previous *Inventory*.
+
 
 ### Planned Improvements
 
-Default emission factors for canals/ditches were derived from a global dataset that include few measurements from U.S. systems. The EPA plans to conduct a literature survey to determine if sufficient data are available to derive a country-specific emission factor for the 1990 through 2024 *Inventory* submission.
-
-Canal and ditch surface area included here may overlap with ditches and canals included in CH~4~ emission estimates for ditches draining inland organic soils (IPCC 2013, section 2.2.2.1). EPA plans to reconcile ditch/canal surface areas between the two managed land types (flooded land vs drained inland organic soils) in the next (i.e., 1990 through 2023) *Inventory*.
-
-Features less than 8 ha in the NW that were not identified as Canal/Ditch were defined as freshwater ponds. Many of these features are lock chambers connected to an upstream reservoir. These systems likely have emission rates more similar to a reservoir than freshwater pond. In the next (1990 through 2023) *Inventory* these systems will be classified as reservoirs.
+Default emission factors for canals/ditches were derived from a global dataset that include few measurements from U.S. systems. The EPA plans to conduct a literature survey to determine if sufficient data are available to derive a country-specific emission factor for the 1990 through 2024 *Inventory* submission. Similarly, default emission factors for ponds were derived from a global dataset that include few measurements from U.S. systems. To assess the accuracy of these defaults, the EPA is conducting a survey of GHG emissions from U.S. ponds from 2024 - 2026. The results of this survey will determine if default or country specific EFs will be used for future inventories. 
 
 # Land Converted to Flooded Land
 
@@ -3881,11 +3979,11 @@ Flooded lands are broadly classified as “reservoirs” or “other constructed
 
 Land that has been flooded for 20 years or greater is defined as flooded land remaining flooded land and land flooded for less than 20 years is defined as land converted to flooded land. The distinction is based on literature reports that CO~2~ and CH~4~ emissions are high immediately following flooding as labile organic matter is rapidly degraded but decline to a steady background level approximately 20 years after flooding (Abril et al. 2005, Barros et al. 2011, Teodoru et al. 2012). Both CO~2~ and CH~4~ emissions are estimated for land converted to flooded land.
 
-Nitrous oxide emissions from flooded lands are largely related to inputs of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting N2O emissions which are captured in other source categories, such as indirect N2O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge).
+Nitrous oxide emissions from flooded lands are largely related to inputs of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting N~2~O emissions which are captured in other source categories, such as indirect N~2~O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge).
 
 Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. The permanently wetted portion of reservoirs are typically surrounded by periodically inundated land referred to as a “drawdown zone” or “inundation area.” Greenhouse gas emissions from inundation areas are considered significant and similar per unit area to the emissions from the water surface and are therefore included in the total reservoir surface area when estimating greenhouse gas emissions from flooded land. Lakes converted into reservoirs without substantial changes in water surface area or water residence times are not considered to be managed flooded land (see Area Estimates below) (IPCC 2019). In 2022, the United States and Puerto Rico contained 72,461 ha of reservoir surface area in land converted to flooded land (see Methodology and Time-Series Consistency below for calculation details) distributed across all six of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) (IPCC 2019).
 
-In 2022, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2022, na.rm = TRUE)) %>% pull()` ha of reservoir surface area in land converted to flooded land (see Methodology and Time-Series Consistency below for calculation details) distributed across `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) (IPCC 2019).
+In 2023, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2022, na.rm = TRUE)) %>% pull() %>% round(.,0)` ha of reservoir surface area in land converted to flooded land (see Methodology and Time-Series Consistency below for calculation details) distributed across `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) (IPCC 2019).
 
 ## Emissions from Land Converted to Flooded Land - Reservoirs
 
@@ -4122,7 +4220,7 @@ knitr::include_graphics("output/figures/climateMapLCFL2023.png")
 
 ```
 
-Methane and CO~2~ are produced in reservoirs through the natural breakdown of organic matter. Per unit area emission rates tend to scale positively with temperature and system productivity (i.e., abundance of algae). Greenhouse gases produced in reservoirs can be emitted directly from the water surface and inundation areas or as greenhouse gas-enriched water passes through the dam and the downstream river. Sufficient information exists to estimate downstream CH~4~ emissions using Tier 1 IPCC guidance (IPCC 2019), but no guidance is provided for downstream CO~2~ emissions. Table 6-101 and Table 6-102 below summarize nationally aggregated CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land. The decrease in CO~2~ and CH~4~ emissions through the time series is attributable to reservoirs matriculating from the land converted to flooded land category into the flooded land remaining flooded land category. Emissions have been stable since 2005, reflecting the low rate of new flooded land creation over the past 17 years.
+Methane and CO~2~ are produced in reservoirs through the natural breakdown of organic matter. Per unit area emission rates tend to scale positively with temperature and system productivity (i.e., abundance of algae). Greenhouse gases produced in reservoirs can be emitted directly from the water surface and inundation areas or as greenhouse gas-enriched water passes through the dam and the downstream river. Sufficient information exists to estimate downstream CH~4~ emissions using Tier 1 IPCC guidance (IPCC 2019), but no guidance is provided for downstream CO~2~ emissions. Table 6-101 and Table 6-102 below summarize nationally aggregated CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land. The decrease in CO~2~ and CH~4~ emissions through the time series is attributable to reservoirs matriculating from the land converted to flooded land category into the flooded land remaining flooded land category. Emissions have been stable since 2005, reflecting the low rate of new flooded land creation over the past 18 years.
 
 ### <!--TABLE::  GHG Emissions from Land Converted to Flooded Land—Reservoirs-->
 
@@ -4314,9 +4412,9 @@ gt(lcfl.ghg.national.subtype.gt.4) %>%
 
 ```
 
-Methane and CO~2~ emissions from reservoirs in Minnesota were 8-fold greater than from any other state (Figure 6-18 and Table 6-105). This is attributed to `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull()` reservoirs created in Minnesota after 2001 which impounded `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` ha of water, `r fl.e %>% pluck("2022") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()` percent of which is located in Mille Lacs lake.
+Methane and CO~2~ emissions from reservoirs in Minnesota were 8-fold greater than from any other state (Figure 6-18 and Table 6-105). This is attributed to `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull()` reservoirs created in Minnesota after 2001 which impounded `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck("2023") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
 
-North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2022") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management.
+North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
@@ -4801,13 +4899,13 @@ knitr::include_graphics("inputData/NWI_criteria.png")
 
 ```
 
-IPCC (2019) allows for the exclusion of managed waterbodies from the inventory if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the inventory based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.
+IPCC (2019) allows for the exclusion of managed waterbodies from the *Inventory* if the water surface area or residence time was not substantially changed by the construction of the dam. The guidance does not quantify what constitutes a “substantial” change, but here EPA excludes the U.S. Great Lakes from the *Inventory* based on expert judgment that neither the surface area nor water residence time was substantially altered by their associated dams.
 
-Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau[^18]) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the Inventory.
+Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Census Bureau[^18]) and climate zone. Downstream and surface emissions for cross-state reservoirs were allocated to states based on the surface area that the reservoir occupied in each state. Only the U.S. portion of reservoirs that cross country borders were included in the *Inventory*.
 
 [^18]: See <https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html>.
 
-The surface area of reservoirs in land converted to flooded land decreased by nearly 90 percent from 1990 to 2022 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2022,[^19] versus 552 in 1990 (Figure 6-20).
+The surface area of reservoirs in land converted to flooded land decreased by nearly 90 percent from 1990 to 2023 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2023,[^19] versus 552 in 1990 (Figure 6-20).
 
 [^19]: See <https://nid.sec.usace.army.mil>.
 
@@ -5116,7 +5214,7 @@ gt(ch4.co2.uncertainty.converted.res.gt,
 
 ### QA/QC and Verification
 
-The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of TransportationStatistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
+The National Hydrography Data (NHD) is managed by the USGS in collaboration many other federal, state, and local entities. Extensive QA/QC procedures are incorporated into the curation of the NHD. The National Inventory of Dams (NID) is maintained by the U.S. Army Corps of Engineers (USACE) in collaboration with the Federal Emergency Management Agency (FEMA) and state regulatory offices. USACE resolves duplicative and conflicting data from 68 data sources, which helps obtain the more complete, accurate, and updated NID. The Navigable Waterways (NW) dataset is part of the U.S. Department of Transportation (USDOT)/Bureau of Transportation Statistics (BTS) National Transportation Atlas Database (NTAD). The NW is a comprehensive network database of the nation's navigable waterways updated on a continuing basis. U.S. Fish and Wildlife Service is the principal agency in charge of wetland mapping including the National Wetlands Inventory (NWI). Quality and consistency of the Wetlands Layer is supported by federal wetlands mapping and classification standards, which were developed under the oversight of the Federal Geographic Data Committee (FGDC) with input by the FGDC Wetlands Subcommittee. This dataset is part of the FGDC Water-Inland Theme, which is co-chaired by the FWS and the U.S. Geological Survey. The EPA's Safe Drinking Water Information System (SDWIS) tracks information on drinking water contamination levels as required by the 1974 Safe Drinking Water Act and its 1986 and 1996 amendments.
 
 General QA/QC procedures were applied to activity data, documentation, and emission calculations consistent with the U.S. Inventory QA/QC plan, which is in accordance with Vol. 1 Chapter 6 of the *2006 IPCC Guidelines* (see Annex 8 for more details). All calculations were executed independently in Excel and R. Ten percent of state and national totals were randomly selected for comparison between the two approaches to ensure there were no computational errors.
 
@@ -5842,7 +5940,7 @@ Surface areas for other constructed waterbodies were taken from NHD, NWI or the 
 
 The age of other constructed waterbody features was determined by assuming the waterbody was created the same year as a nearby (up to 100 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series. No canal/ditch features were associated with a nearby dam, therefore all canal/ditch features were assumed to be greater than 20-years old through the time series.
 
-For the year 2022, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull()` ha of freshwater ponds in land converted to flooded land. The surface area of freshwater ponds decreased by `r (fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022, na.rm = TRUE)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()) / fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` percent from 1990 to 2022 due to flooded lands aging out of land converted to flooded land more quickly than new flooded lands entered the category. The greatest reduction in freshwater pond surface area occurred in Iowa, Kansas, and Georgia (Table 6-117). Freshwater ponds in the 2021 *Inventory* are most abundant in Nebraska, Montana, and Kansas (Figure 6-22).
+For the year 2023, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2023, na.rm = TRUE)) %>% pull()` ha of freshwater ponds in land converted to flooded land. The surface area of freshwater ponds decreased by `r (fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2023 = sum(area2023, na.rm = TRUE)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()) / fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull()` percent from 1990 to 2023 due to flooded lands aging out of land converted to flooded land more quickly than new flooded lands entered the category. The greatest reduction in freshwater pond surface area occurred in Iowa, Kansas, and Georgia (Table 6-117). Freshwater ponds in the 2021 *Inventory* are most abundant in Nebraska, Montana, and Kansas (Figure 6-22).
 
 ##### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies-->
 
