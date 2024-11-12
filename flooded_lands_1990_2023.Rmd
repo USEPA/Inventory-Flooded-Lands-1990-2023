@@ -1305,6 +1305,7 @@ lcfl.ghg.national.subtype <- lcfl.ghg.national.subtype.l %>%
 unique(lcfl.ghg.national.subtype$flux.type) # no "oops!", good
 unique(lcfl.ghg.national.subtype$gas) # no "oops!", good
 unique(lcfl.ghg.national.subtype$units) # no "oops!", good
+
 ```
 
 
@@ -2501,6 +2502,8 @@ mean.change.abs <- (flrfl.ch4.reservoir.national.current.inventory -
          mean_change_abs_mmtco2eq = (mean_change_abs / 1000) * 28) %>% 
   pull(abs(mean_change_abs_mmtco2eq))
   
+
+
 
 ```
 -NID updates  
@@ -3957,6 +3960,28 @@ mean.change.abs <- (flrfl.ch4.ocwb.national.current.inventory -
          mean_change_abs_mmtco2eq = (mean_change_abs / 1000) * 28) %>% 
   pull(abs(mean_change_abs_mmtco2eq))
   
+
+# Lands Converted to Flooded Lands - Other Constructed Waterbodies
+
+# flrfl/ocwb emissions in current inventory: 1990-2022 
+flrfl.ch4.ocwb.national.current.inventory.other <- 
+  lcfl.ghg.national.subtype.l %>% 
+  bind_rows() %>%
+  filter(subtype %in% c("freshwater pond", "canals and ditches"), 
+         flux.type == "total") %>% 
+  select(-Activity, -subtype, -flux.type, -`2023`) %>%
+  summarise(across(everything(), sum))
+
+# flrfl/ocwb emissions in previous inventory: 1990-2022
+flrfl.ch4.ocwb.national.previous.inventory <- 
+  readxl::read_xlsx(
+    path = "inputData/FloodedLands-Output_90-22_07Nov2023.xlsx", 
+    sheet = "7.3.1_FLRFL_summary", 
+    range = "C17:AI20",
+    col_names = as.character(1990:2022)) %>%
+  slice(c(1,4)) %>%
+  summarise(across(everything(), sum))
+
 
 ```
 
@@ -6394,7 +6419,7 @@ The EPA's SDWIS is a new data source used in the current (1990 through 2022) *In
 
 The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current Inventory contains 47 new dams and updated values for “year of dam completion” for 975 dams relative to the previous (1990 through 2021) *Inventory* data. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current Inventory has major updates for MS, ND, NM, and MT.
 
-The net effect of these recalculations was an average annual increase in CH~4~ and CO~2~ emissions from other constructed waterbodies of 0.03 MMT CO~2~ Eq., or 51 percent, over the time series from 1990 to 2021 compared to the previous *Inventory*.
+The net effect of these recalculations was an average annual increase in CH~4~ and CO~2~ emissions from other constructed waterbodies of `r  round(mean.change.other.abs, 2)` MMT CO~2~ Eq., or `r mean.change.other.perc` percent, over the time series from 1990 to 2022 compared to the previous *Inventory*.
 
 ### Planned Improvements
 
