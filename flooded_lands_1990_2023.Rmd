@@ -1050,15 +1050,15 @@ A.Data.1990.export <- A.Data.1990 %>%
                 ~replace(., . == 0, "NE"))) # replace the zeroes with NE
 
 # paste into excel for formatting, then paste into Word.
-# file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx"
-# wb <- wb_load(file)
-# openxlsx2::write_data(wb,
-#                       x = A.Data.1990.export,
-#                       sheet = "A. Data (Base Year, 1990)",
-#                       row_names = FALSE, col_names = TRUE,
-#                       start_row = 11,
-#                       start_col = 2)
-# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = A.Data.1990.export,
+                  sheet = "A. Data (Base Year, 1990)",
+                  row_names = FALSE, col_names = TRUE,
+                  start_row = 11,
+                  start_col = 2)
+openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
 
 
 
@@ -1087,15 +1087,15 @@ A.Data.2023.export <- A.Data.2023 %>%
 
 
 # paste into excel for formatting, then paste into Word.
-# file <- "output/FloodedLands-Output_90-22_write_to_from_R.xlsx"
-# wb <- wb_load(file)
-# openxlsx2::write_data(wb,
-#                       x = A.Data.1990.export,
-#                       sheet = "A. Data (Current Year)",
-#                       row_names = FALSE, col_names = TRUE,
-#                       start_row = 11,
-#                       start_col = 2)
-# openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = A.Data.1990.export,
+                  sheet = "A. Data (Current Year)",
+                  row_names = FALSE, col_names = TRUE,
+                  start_row = 11,
+                  start_col = 2)
+openxlsx2::wb_save(wb, file, overwrite = TRUE) ## save changes to excel
 
 
 ```
@@ -2372,6 +2372,7 @@ Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land rema
 
 ```{r}
 
+# Current year for Markdown and Excel
 ch4.co2.uncertainty.gt <- ch4.co2.uncertainty.mean.table.total %>%
   filter(lu == "Flooded Land Remaining Flooded Land", 
          type == "reservoir", year == 2023) %>%
@@ -2394,8 +2395,30 @@ ch4.co2.uncertainty.gt <- ch4.co2.uncertainty.mean.table.total %>%
   pivot_wider(names_from = variable, values_from = value) %>%
   relocate(ch4_est, .before = ch4_min)
   
+# Base year for Excel only
+ch4.co2.uncertainty.gt.base <- ch4.co2.uncertainty.mean.table.total %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         type == "reservoir", year == 1990) %>%
+  select(contains("ch4")) %>%
+  pivot_longer(cols = contains("ch4"), names_to = "variable", values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "surface"), 
+                        "Surface", "Downstream")) %>%
+  filter(!str_detect(variable, "total")) %>%
+  mutate(variable = case_when(
+         variable == "ch4.surface.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.surface.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.surface.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.surface" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.surface" ~ "ch4_up_per", 
+         variable == "ch4.dn.mmt.co2.eq.y" ~ "ch4_est", 
+         variable == "ch4.dn.mmt.co2.eq.y_min" ~ "ch4_min", 
+         variable == "ch4.dn.mmt.co2.eq.y_max" ~ "ch4_max", 
+         variable == "lwr.perc.ch4.dn" ~ "ch4_low_per", 
+         variable == "upr.perc.ch4.dn" ~ "ch4_up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(ch4_est, .before = ch4_min)
 
-
+# gt table for current year data
 gt(ch4.co2.uncertainty.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
@@ -2460,7 +2483,32 @@ in Flooded Land Remaining Flooded Land")) %>%
                             cells_grand_summary())) %>%
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
-  
+
+# Write table data (base year & current year) to Excel workbook 
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.gt.base %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype),
+                  sheet = "C. Results (Base Year, 1990)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 14,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.gt %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype),
+                  sheet = "C. Results (Current Year)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 15,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel  
+
 ```
 
 ##### QA/QC and Verification
@@ -3830,6 +3878,7 @@ Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (
 ```{r}
 # Table 6-96: Approach 2 Quantitative Uncertainty Estimates for CH4 Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land
 
+# Current year for Markdown and Excel
 ch4.co2.uncertainty.other.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Flooded Land Remaining Flooded Land", 
          subtype != "reservoir", year == 2023) %>%
@@ -3840,6 +3889,16 @@ ch4.co2.uncertainty.other.gt <- ch4.co2.uncertainty.mean.table %>%
          ch4_low_per = lwr.perc.ch4.surface,  
          ch4_up_per = upr.perc.ch4.surface)
 
+# Base year for Excel only
+ch4.co2.uncertainty.other.gt.base <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Flooded Land Remaining Flooded Land", 
+         subtype != "reservoir", year == 1990) %>%
+  select(subtype, 
+         ch4_est = ch4.surface.mmt.co2.eq.y,
+         ch4_min = ch4.surface.mmt.co2.eq.y_min,
+         ch4_max = ch4.surface.mmt.co2.eq.y_max, 
+         ch4_low_per = lwr.perc.ch4.surface,  
+         ch4_up_per = upr.perc.ch4.surface)
 
 gt(ch4.co2.uncertainty.other.gt, 
    rowname_col = "subtype") %>%
@@ -3904,6 +3963,31 @@ gt(ch4.co2.uncertainty.other.gt,
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
             
+# Write table data (base year & current year) to Excel workbook 
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.other.gt.base %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype),
+                  sheet = "C. Results (Base Year, 1990)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 24,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.other.gt %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype),
+                  sheet = "C. Results (Current Year)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 25,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel  
+
 ```
 
 ### QA/QC and Verification
@@ -5137,6 +5221,7 @@ Uncertainty in estimates of CH~4~ and CO~2~ emissions from reservoirs on land co
 
 ```{r}
 
+# Current year for Markdown and Excel
 ch4.co2.uncertainty.converted.res.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Land Converted to Flooded Land", 
          subtype == "reservoir", year == 2023) %>%
@@ -5166,7 +5251,37 @@ ch4.co2.uncertainty.converted.res.gt <- ch4.co2.uncertainty.mean.table %>%
   relocate(est, .before = min) %>%
   arrange(desc(subtype))
 
-	
+# Base year for Excel only
+ch4.co2.uncertainty.converted.res.gt.base <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "reservoir", year == 1990) %>%
+  select(-lu, -year, -contains("total")) %>%
+  pivot_longer(cols = !subtype, names_to = "variable", 
+               values_to = "value") %>%
+  mutate(subtype = if_else(str_detect(variable, "dn"), 
+                           "Downstream", "Surface")) %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(variable = case_when(
+    variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+    variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+    variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+    variable == "ch4.dn.mmt.co2.eq.y" ~ "est", 
+    variable == "ch4.dn.mmt.co2.eq.y_min" ~ "min", 
+    variable == "ch4.dn.mmt.co2.eq.y_max" ~ "max", 
+    variable == "lwr.perc.ch4.surface" ~ "low_per", 
+    variable == "upr.perc.ch4.surface" ~ "up_per", 
+    variable == "lwr.perc.ch4.dn" ~ "low_per", 
+    variable == "upr.perc.ch4.dn" ~ "up_per", 
+    variable == "co2.mmt.co2.eq.y" ~ "est",
+    variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+    variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+    variable == "lwr.perc.co2" ~ "low_per", 
+    variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min) %>%
+  arrange(desc(subtype))
+
+
 gt(ch4.co2.uncertainty.converted.res.gt, 
    rowname_col = "subtype") %>%
   tab_header(title = md(
@@ -5235,6 +5350,32 @@ gt(ch4.co2.uncertainty.converted.res.gt,
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
   
+
+# Write table data (base year & current year) to Excel workbook 
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.converted.res.gt.base %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype, -Gas),
+                  sheet = "C. Results (Base Year, 1990)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 37,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.converted.res.gt %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype, -Gas),
+                  sheet = "C. Results (Current Year)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 38,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel  
+
 ```
 
 ### QA/QC and Verification
@@ -6320,7 +6461,7 @@ Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flo
 
 ```{r}
 
-
+# Current year for Markdown and Excel
 ch4.co2.uncertainty.converted.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Land Converted to Flooded Land", 
          subtype == "freshwater pond", year == 2023) %>%
@@ -6342,6 +6483,27 @@ ch4.co2.uncertainty.converted.gt <- ch4.co2.uncertainty.mean.table %>%
   pivot_wider(names_from = variable, values_from = value) %>%
   relocate(est, .before = min)
 
+# Base year for Excel only
+ch4.co2.uncertainty.converted.gt.base <- ch4.co2.uncertainty.mean.table %>%
+  filter(lu == "Land Converted to Flooded Land", 
+         subtype == "freshwater pond", year == 1990) %>%
+  select(-lu, -year, -contains("total"), -contains("dn")) %>%
+  pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
+  mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
+  mutate(subtype = "Freshwater ponds") %>%
+  mutate(variable = case_when(
+    variable == "ch4.surface.mmt.co2.eq.y" ~ "est", 
+    variable == "ch4.surface.mmt.co2.eq.y_min" ~ "min", 
+    variable == "ch4.surface.mmt.co2.eq.y_max" ~ "max", 
+    variable == "lwr.perc.ch4.surface" ~ "low_per", 
+    variable == "upr.perc.ch4.surface" ~ "up_per", 
+    variable == "co2.mmt.co2.eq.y" ~ "est",
+    variable == "co2.mmt.co2.eq.y_min" ~ "min", 
+    variable == "co2.mmt.co2.eq.y_max" ~ "max", 
+    variable == "lwr.perc.co2" ~ "low_per", 
+    variable == "upr.perc.co2" ~ "up_per")) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  relocate(est, .before = min)
 
 gt(ch4.co2.uncertainty.converted.gt, 
    rowname_col = "subtype") %>%
@@ -6404,7 +6566,34 @@ gt(ch4.co2.uncertainty.converted.gt,
                             cells_grand_summary())) %>%
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) %>%
-  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")    
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")  
+
+
+# Write table data (base year & current year) to Excel workbook 
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.converted.gt.base %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype, -Gas),
+                  sheet = "C. Results (Base Year, 1990)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 52,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel
+
+file <- "output/FloodedLands-Output_90-23_clean.xlsx"
+wb <- wb_load(file)
+wb <- wb_add_data(wb,
+                  x = ch4.co2.uncertainty.converted.gt %>% 
+                    janitor::adorn_totals() %>%
+                    select(-subtype, -Gas),
+                  sheet = "C. Results (Current Year)",
+                  row_names = FALSE, col_names = FALSE,
+                  start_row = 53,
+                  start_col = 6)
+wb_save(wb, file, overwrite = TRUE) ## save changes to excel  
+
 ```
 
 ### QA/QC and Verification
