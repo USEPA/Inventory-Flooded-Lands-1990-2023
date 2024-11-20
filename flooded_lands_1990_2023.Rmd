@@ -1741,7 +1741,7 @@ gt(flrfl.ch4.national.subtype.co2.gt,
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.") 
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
 
 # kt CH4
 flrfl.ch4.national.subtype.kt.ch4.gt <- 
@@ -1813,7 +1813,7 @@ gt(flrfl.ch4.national.subtype.kt.ch4.gt,
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.") 
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
 
 ```
 
@@ -2611,7 +2611,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_style(style = cell_text(align = "right"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.") 
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
 
 
 # kt table
@@ -2679,7 +2679,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_style(style = cell_text(align = "right"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.") 
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
 
 ```
 
@@ -3291,7 +3291,7 @@ gt(flrfl.ocwb.area.national.gt %>%
   tab_style(style = cell_text(align = "right"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.") 
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.") 
 
 ```
 
@@ -3895,7 +3895,7 @@ gt(ch4.co2.uncertainty.other.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(missing_text = "CH4",
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(.), 
+    fmt = ~ fmt_number(decimals = 1), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -4322,7 +4322,7 @@ gt(lcfl.ghg.national.subtype.gt.1, rowname_col = "Source") %>%
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
   tab_footnote(footnote = md("\\+ Indicates values less than 0.5 MMT CO<sub>2</sub>.")) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
 
 # CH4: kt CH4
 lcfl.ghg.national.subtype.gt.2 <- lcfl.ghg.national.subtype %>% 
@@ -4382,7 +4382,7 @@ gt(lcfl.ghg.national.subtype.gt.2,
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
   tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
 
 
 # CO2: MMT CO2
@@ -4855,11 +4855,11 @@ gt(lcfl.res.ghg.by.state.gt %>%
     grand_summary_row.border.style = "solid",
     grand_summary_row.border.color = "black",
     grand_summary_row.border.width = 3) %>%
-  grand_summary_rows(
-    columns = where(is.numeric), 
-        fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
-      fmt_number(., decimals = 1, use_seps = TRUE),
-    fns = list(Total ~ sum(., na.rm = TRUE))) %>%
+  # grand_summary_rows(
+  #   columns = where(is.numeric), 
+  #       fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+  #     fmt_number(., decimals = 1, use_seps = TRUE),
+    # fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_stubhead(), 
                              cells_column_spanners(),
@@ -4998,7 +4998,7 @@ gt(fl.cl.area.state.type.gt.2) %>%
     "Table 6-107: National Totals of Reservoir Surface Area in Land Converted to Flooded Land (thousands of ha)")) %>%
   cols_label(subtype = "Surface Area (thousands of ha)") %>%
   sub_missing(missing_text = " ") %>%
-  fmt_number (decimals = 1) %>%
+  fmt_number (decimals = 0) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -5131,7 +5131,7 @@ gt(lcfl.res.area.by.state.gt.2 %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
 
 ```
 
@@ -5247,6 +5247,7 @@ gt(ch4.co2.uncertainty.converted.res.gt,
   tab_stub_indent(
     rows = everything(),
     indent = 3) %>%
+  rows_add(subtype = "Reservoir", .before = 1) %>%
   cols_label(Gas = "",
              est = "", 
              min = "Lower Bound", 
@@ -5286,6 +5287,7 @@ gt(ch4.co2.uncertainty.converted.res.gt,
             locations = list(cells_grand_summary(), cells_stubhead(), 
                              cells_title(), cells_stub_grand_summary(), 
                              cells_row_groups(), 
+                             cells_stub(1), 
                              cells_column_spanners(),
                              cells_column_labels())) %>%
   tab_style(style = cell_fill(color = "lightgray"),
@@ -5661,7 +5663,7 @@ to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
   opt_row_striping() %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
-  tab_spanner(label = "Freshwater Ponds", columns = 2:4) %>%
+  tab_spanner(label = "Freshwater Ponds", columns = 1:4) %>%
   tab_options(
     heading.border.bottom.style = "solid",
     heading.border.bottom.color = "black",
@@ -5698,7 +5700,7 @@ to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
 
 
 ```
@@ -6399,7 +6401,7 @@ gt(lcfl.ocwb.area.state.gt %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
+  tab_footnote(footnote = "Note: Totals may not sum due to independent rounding.")
 
 ```
 
