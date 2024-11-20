@@ -3895,7 +3895,7 @@ gt(ch4.co2.uncertainty.other.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(missing_text = "CH4",
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(decimals = 1), 
+    fmt = ~ fmt_number(., decimals = 1), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
