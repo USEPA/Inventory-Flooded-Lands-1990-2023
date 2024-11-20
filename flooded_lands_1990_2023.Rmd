@@ -233,7 +233,7 @@ fl.sf <- fl.sf %>%
                           unique_id == fixYear[2,1] %>% pull ~ fixYear[2,2] %>% pull,
                           unique_id == fixYear[3,1] %>% pull ~ fixYear[3,2] %>% pull,
                           unique_id == fixYear[4,1] %>% pull ~ fixYear[4,2] %>% pull,
-                          unique_id == fixYear[5,1] %>% pull ~ fixYear[5,2] %>% pull
+                          unique_id == fixYear[5,1] %>% pull ~ fixYear[5,2] %>% pull,
                           TRUE ~ year))
 
 nrow(fl.sf) # 6,291,174
