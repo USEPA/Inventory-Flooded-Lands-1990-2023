@@ -221,7 +221,7 @@ fixYear <- tribble(
   1632041, 1953, # Lake Sakakawea
   1390603, 1954, # Francis-Case, SD
   5496640, 1963, # Lake Sharpe, SD
-  3860171, 1970) # Robert S Kerr Reservoir and Webbers Falls Reservoir
+  3860171, 1970) # Robert S Kerr Reservoir and Webbers Falls Reservoir in OK
 
 # dplyr::rows_update should provide an efficient method for updating the
 # values but sf objects are not yet supported. See https://github.com/tidyverse/dplyr/issues/5906
@@ -233,6 +233,7 @@ fl.sf <- fl.sf %>%
                           unique_id == fixYear[2,1] %>% pull ~ fixYear[2,2] %>% pull,
                           unique_id == fixYear[3,1] %>% pull ~ fixYear[3,2] %>% pull,
                           unique_id == fixYear[4,1] %>% pull ~ fixYear[4,2] %>% pull,
+                          unique_id == fixYear[5,1] %>% pull ~ fixYear[5,2] %>% pull
                           TRUE ~ year))
 
 nrow(fl.sf) # 6,291,174
@@ -2067,7 +2068,6 @@ gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
              ch4.total.ktonnes.y = "Total") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 0) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -2256,7 +2256,6 @@ gt(flrfl.area.reservoir.state.gt %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 2) %>%
   sub_small_vals(threshold = 0.005, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -2270,7 +2269,8 @@ gt(flrfl.area.reservoir.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(.), 
+    fmt = ~ sub_small_vals(., threshold = 0.005, small_pattern = "+") %>% 
+      fmt_number(., decimals = 2, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_grand_summary(), 
@@ -2726,7 +2726,6 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
   tab_stubhead(label = "State") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 1) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -2740,7 +2739,8 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
+        fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 1, use_seps = TRUE), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_stubhead(), 
@@ -4283,7 +4283,6 @@ gt(lcfl.ghg.national.subtype.gt.1, rowname_col = "Source") %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 1) %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -4297,7 +4296,8 @@ gt(lcfl.ghg.national.subtype.gt.1, rowname_col = "Source") %>%
     column_labels.border.bottom.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fmt = ~ sub_small_vals(., threshold = 0.05, small_pattern = "+") %>% 
+      fmt_number(., decimals = 1, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -4315,13 +4315,13 @@ gt(lcfl.ghg.national.subtype.gt.1, rowname_col = "Source") %>%
               cells_column_labels(), cells_stubhead(), 
               cells_grand_summary(), cells_stub_grand_summary(),
               cells_stub(
-                rows = seq(2, nrow(flrfl.ch4.national.subtype.co2.gt), by = 2)),
+                rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.1), by = 2)),
               cells_body(
-                rows = seq(2, nrow(flrfl.ch4.national.subtype.co2.gt), by = 2)))) %>%
+                rows = seq(2, nrow(lcfl.ghg.national.subtype.gt.1), by = 2)))) %>%
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = md("+ Indicates values less than 0.5 MMT CO<sub>2</sub>.")) %>%
+  tab_footnote(footnote = md("\\+ Indicates values less than 0.5 MMT CO<sub>2</sub>.")) %>%
   tab_footnote(footnote = "Note: Totals may not sum to due independent rounding.")
 
 # CH4: kt CH4
@@ -4343,7 +4343,6 @@ gt(lcfl.ghg.national.subtype.gt.2,
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -4357,7 +4356,8 @@ gt(lcfl.ghg.national.subtype.gt.2,
     column_labels.border.bottom.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 0, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -4479,9 +4479,9 @@ lcfl.ghg.2023.reservoir.mn.ratio <- fl.e$`2023` %>%
 
 
 ```
-Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(., cap = TRUE)` reservoirs were created in Minnesota after 2001 which impounded `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck("2023") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
+Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(.)` reservoirs created after 2001 which impounded `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck("2023") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
 
-North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management.
+North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management. The dams have not substantially increased the surface area of these reservoirs, but serve to reduce flooding and/or maintain minimum water levels for recreation, thereby affecting water residence time.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
@@ -4843,7 +4843,6 @@ gt(lcfl.res.ghg.by.state.gt %>%
   tab_spanner(label = md("CO<sub>2<sub>"), columns = 5, id = "co2") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 1) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -4858,7 +4857,8 @@ gt(lcfl.res.ghg.by.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
+        fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 1, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_stubhead(), 
@@ -5255,7 +5255,6 @@ gt(ch4.co2.uncertainty.converted.res.gt,
              up_per = "Upper Bound") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number(decimals = 2) %>%
   tab_stubhead(label = "Source") %>%
   tab_spanner(label = "Source", columns = 1, level = 1) %>%
@@ -5280,7 +5279,8 @@ gt(ch4.co2.uncertainty.converted.res.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(missing_text = " ",
                      columns = where(is.numeric), 
-                     fmt = ~ fmt_number(.), 
+                         fmt = ~ sub_small_vals(., threshold = 0.05, small_pattern = "+") %>% 
+      fmt_number(., decimals = 2, use_seps = TRUE),
                      fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -5304,7 +5304,8 @@ gt(ch4.co2.uncertainty.converted.res.gt,
   tab_style(style = cell_text(align = "center"), 
             location = list(cells_body(), cells_column_labels(), 
                             cells_grand_summary())) %>%
-  tab_footnote(footnote = md("+ Indicates values less than 0.05 MMT CO2 Eq.")) %>%
+  tab_footnote(footnote = md("\\+ Indicates values less than 0.05 MMT CO<sub>2</sub> Eq.")) %>%
+
   tab_footnote(footnote = " Range of emission estimates predicted by Monte Carlo stochastic simulation for a 95 percent confidence interval.", 
                locations = cells_column_spanners(spanners = "range")) 
   
@@ -5435,7 +5436,6 @@ gt(lcfl.ghg.national.subtype.gt.5) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 1) %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5474,7 +5474,6 @@ gt(lcfl.ghg.national.subtype.gt.6) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5514,7 +5513,6 @@ gt(lcfl.ghg.national.subtype.gt.7) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 1) %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5554,7 +5552,6 @@ lcfl.ghg.national.subtype.gt.8 <- lcfl.ghg.national.subtype %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.005, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5695,9 +5692,9 @@ to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
               cells_column_labels(), cells_stubhead(), 
               cells_grand_summary(), cells_stub_grand_summary(),
               cells_stub(
-                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)),
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state.2023), by = 2)),
               cells_body(
-                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)))) %>%
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state.2023), by = 2)))) %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
