@@ -2045,7 +2045,6 @@ gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
              ch4.total.ktonnes.y = "Total") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 0) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -2234,7 +2233,6 @@ gt(flrfl.area.reservoir.state.gt %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 2) %>%
   sub_small_vals(threshold = 0.005, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -2248,7 +2246,8 @@ gt(flrfl.area.reservoir.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(.), 
+    fmt = ~ sub_small_vals(., threshold = 0.005, small_pattern = "+") %>% 
+      fmt_number(., decimals = 2, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_grand_summary(), 
@@ -2706,7 +2705,6 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
   tab_stubhead(label = "State") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 1) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -2720,7 +2718,8 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
+        fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 1, use_seps = TRUE), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_stubhead(), 
@@ -4329,7 +4328,6 @@ gt(lcfl.ghg.national.subtype.gt.2,
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   tab_options(
     heading.border.bottom.style = "solid", 
     heading.border.bottom.color = "black",
@@ -4343,7 +4341,8 @@ gt(lcfl.ghg.national.subtype.gt.2,
     column_labels.border.bottom.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 1, use_seps = TRUE), 
+    fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 0, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -4798,7 +4797,6 @@ gt(lcfl.res.ghg.by.state.gt %>%
   tab_spanner(label = md("CO<sub>2<sub>"), columns = 5, id = "co2") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number (decimals = 1) %>%
   tab_options(
     heading.border.bottom.style = "solid", 
@@ -4813,7 +4811,8 @@ gt(lcfl.res.ghg.by.state.gt %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(., decimals = 0, use_seps = TRUE), 
+        fmt = ~ sub_small_vals(., threshold = 0.5, small_pattern = "+") %>% 
+      fmt_number(., decimals = 1, use_seps = TRUE),
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_title(), cells_stubhead(), 
@@ -5210,7 +5209,6 @@ gt(ch4.co2.uncertainty.converted.res.gt,
              up_per = "Upper Bound") %>%
   sub_missing(missing_text = " ") %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   fmt_number(decimals = 2) %>%
   tab_stubhead(label = "Source") %>%
   tab_spanner(label = "Source", columns = 1, level = 1) %>%
@@ -5235,7 +5233,8 @@ gt(ch4.co2.uncertainty.converted.res.gt,
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(missing_text = " ",
                      columns = where(is.numeric), 
-                     fmt = ~ fmt_number(.), 
+                         fmt = ~ sub_small_vals(., threshold = 0.05, small_pattern = "+") %>% 
+      fmt_number(., decimals = 2, use_seps = TRUE),
                      fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -5391,7 +5390,6 @@ gt(lcfl.ghg.national.subtype.gt.5) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 1) %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5430,7 +5428,6 @@ gt(lcfl.ghg.national.subtype.gt.6) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.5, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5470,7 +5467,6 @@ gt(lcfl.ghg.national.subtype.gt.7) %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 1) %>%
   sub_small_vals(threshold = 0.05, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5510,7 +5506,6 @@ lcfl.ghg.national.subtype.gt.8 <- lcfl.ghg.national.subtype %>%
   sub_missing(missing_text = " ") %>%
   fmt_number (decimals = 0) %>%
   sub_small_vals(threshold = 0.005, small_pattern = "+") %>%
-  sub_zero(zero_text = "+") %>%
   text_replace(pattern = "freshwater pond", 
                replacement = "Freshwater Ponds") %>%
   tab_options(
@@ -5651,9 +5646,9 @@ to Flooded Land in 2023 (MT CO<sub>2</sub> Eq.)")) %>%
               cells_column_labels(), cells_stubhead(), 
               cells_grand_summary(), cells_stub_grand_summary(),
               cells_stub(
-                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)),
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state.2023), by = 2)),
               cells_body(
-                rows = seq(2, nrow(lcfl.ocwb.ghg.state), by = 2)))) %>%
+                rows = seq(2, nrow(lcfl.ocwb.ghg.state.2023), by = 2)))) %>%
   tab_style(style = cell_text(align = "right"),
             location = list(cells_body(), cells_column_labels(),
                             cells_grand_summary())) %>%
