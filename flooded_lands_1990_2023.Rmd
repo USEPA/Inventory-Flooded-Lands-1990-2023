@@ -4867,13 +4867,14 @@ gt(lcfl.res.ghg.by.state.gt %>%
     tab_style(style = cell_fill(color = "lightgray"),
             locations = list(
               cells_column_labels(), cells_stubhead(), cells_column_spanners(),
-              cells_grand_summary(), cells_stub_grand_summary(),
+              # cells_grand_summary(), cells_stub_grand_summary(),
               cells_stub(
                 rows = seq(2, nrow(lcfl.res.ghg.by.state.gt), by = 2)),
               cells_body(
                 rows = seq(2, nrow(lcfl.res.ghg.by.state.gt), by = 2)))) %>%
   tab_style(style = cell_text(align = "center"),
-            location = list(cells_body(), cells_grand_summary(), 
+            location = list(cells_body(), 
+                            # cells_grand_summary(), 
                             cells_column_labels())) %>%
   tab_footnote(footnote = "+ Indicates values less than 0.5 kt.") %>%
   tab_footnote(footnote = md("CO<sub>2</sub>: Only surface CO<sub>2</sub> emissions are included in the *Inventory*."), 
