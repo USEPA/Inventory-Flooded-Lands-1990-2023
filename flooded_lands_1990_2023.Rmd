@@ -8,7 +8,7 @@ output:
   html_document: null
 bibliography: bibliography_fl.bib
 link-citations: yes
-csl: nature_geoscience.csl
+csl: apa.csl
 toc: true
 toc_float: true
 fig_caption: true
