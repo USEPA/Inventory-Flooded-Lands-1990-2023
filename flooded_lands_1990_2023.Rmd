@@ -1294,7 +1294,7 @@ wb <- wb_load(file)
 sheets <- openxlsx2::wb_get_sheet_names(wb)
 
 # 1. WRITE SURFACE AREAS AND EFs FOR FLRFL AND LCFL TO STATE SPECIFIC SHEETS
-# Before running this, delete values from A6:AL19, A31:AL41 in each state tab
+# Before running this, delete values from A6:AM19, A31:AM41 in each state tab
 
 # Sheet names states in inventory
 stateNames <- st_crosswalk_no_GU_VQ %>% 
@@ -1307,15 +1307,15 @@ for (i in 1:nrow(stateNames)){ # very fast
   sheet.i <- sheets[endsWith(sheets, stateNames$state_abbr[i])]
   
   # write FLRFL
-    wb$add_data(
-                        sheet = sheet.i,
-                        x = fl.cl.area.state.type %>% 
-                          filter(lu == "Flooded Land Remaining Flooded Land",
-                                 name == stateNames$name[i]) %>%
-                          select(-contains("co2")),  
-                        row_names = FALSE, col_names = FALSE,
-                        start_row = 6, start_col = 1,
-                        with_filter = FALSE)
+  wb$add_data(
+    sheet = sheet.i,
+    x = fl.cl.area.state.type %>% 
+      filter(lu == "Flooded Land Remaining Flooded Land",
+             name == stateNames$name[i]) %>%
+      select(-contains("co2")),  
+    row_names = FALSE, col_names = FALSE,
+    start_row = 6, start_col = 1,
+    with_filter = FALSE)
   # openxlsx2::wb_add_data(wb,
   #                       sheet = sheet.i,
   #                       x = fl.cl.area.state.type %>% 
@@ -1327,17 +1327,17 @@ for (i in 1:nrow(stateNames)){ # very fast
   #                       with_filter = FALSE)
   
   # write LCFL
-  openxlsx2::wb_add_data(wb,
-                        x = fl.cl.area.state.type %>% 
-                          filter(lu == "Land Converted to Flooded Land",
-                                 name == stateNames$name[i]) %>%
-                          # CO2 emission factor after CH4 emission factor to be 
-                          # consistent with Excel templates.
-                          relocate(CO2.emission.factor.tonnes.co2.ha.y, .after = last_col()),
-                        sheet = sheet.i, # pull name from list
-                        row_names = FALSE, col_names = FALSE,
-                        start_row = 31, # Will be below longest FLRFL table
-                        start_col = 1)
+  wb$add_data(sheet = sheet.i, # pull name from list
+              x = fl.cl.area.state.type %>% 
+                filter(lu == "Land Converted to Flooded Land",
+                       name == stateNames$name[i]) %>%
+                # CO2 emission factor after CH4 emission factor to be 
+                # consistent with Excel templates.
+                relocate(CO2.emission.factor.tonnes.co2.ha.y, .after = last_col()),
+              row_names = FALSE, col_names = FALSE,
+              start_row = 31, # Will be below longest FLRFL table
+              start_col = 1,
+              with_filter = FALSE)
   
   print(paste0("data_added-", i)) # progress updates
 }
@@ -1346,41 +1346,38 @@ for (i in 1:nrow(stateNames)){ # very fast
 
 
 # 2. WRITE FLOODED LAND REMAINING FLOODED LAND NATIONAL CH4 FLUX TABLE
-# To be conservative, delete values from B13:AI25 before running
+# To be conservative, delete values from B13:AJ25 before running
 # openxlsx2
-openxlsx2::wb_add_data(wb,
-                      x = flrfl.ch4.national.subtype %>%
-                        select(-flux.type, -subtype), 
-                      sheet = "7.3.1_FLRFL_summary",
-                      row_names = FALSE, col_names = TRUE,
-                      start_row = 13, 
-                      start_col = 2)
+wb$add_data(sheet = "7.3.1_FLRFL_summary",
+            x = flrfl.ch4.national.subtype %>%
+              select(-flux.type, -subtype), 
+            row_names = FALSE, col_names = TRUE,
+            start_row = 13, 
+            start_col = 2)
 
 # 3. WRITE LAND CONVERTED TO FLOODED LAND NATIONAL CH4 FLUX TABLE
-# To be conservative, delete values from B13:AI22 before running
+# To be conservative, delete values from B13:AJ22 before running
 # openxlsx2
-openxlsx2::wb_add_data(wb,
-                      x = lcfl.ghg.national.subtype %>%
-                        filter(gas == "ch4") %>%
-                        select(-flux.type, -subtype, -gas, -units),
-                      sheet = "7.3.2_LCFL_summary",
-                      row_names = FALSE, col_names = TRUE,
-                      start_row = 13, 
-                      start_col = 2)
+wb$add_data(sheet = "7.3.2_LCFL_summary",
+            x = lcfl.ghg.national.subtype %>%
+              filter(gas == "ch4") %>%
+              select(-flux.type, -subtype, -gas, -units),
+            row_names = FALSE, col_names = TRUE,
+            start_row = 13, 
+            start_col = 2)
 
 # 4. WRITE LAND CONVERTED TO FLOODED LAND NATIONAL CO2 FLUX TABLE
-# To be conservative, delete values from B46:AI49 before running
+# To be conservative, delete values from B46:AJ49 before running
 # openxlsx2
-openxlsx2::wb_add_data(wb,
-                      x = lcfl.ghg.national.subtype %>%
-                        filter(gas == "co2", units == "mmt", 
-                               subtype != "canals and ditches") %>% # no CO2 for canals and ditches
-                        select(-flux.type, -Activity, -gas, -units) %>%
-                        rename(Activity = subtype),
-                      sheet = "7.3.2_LCFL_summary",
-                      row_names = FALSE, col_names = TRUE,
-                      start_row = 46, 
-                      start_col = 2)
+wb$add_data(sheet = "7.3.2_LCFL_summary",
+            x = lcfl.ghg.national.subtype %>%
+              filter(gas == "co2", units == "mmt", 
+                     subtype != "canals and ditches") %>% # no CO2 for canals and ditches
+              select(-flux.type, -Activity, -gas, -units) %>%
+              rename(Activity = subtype),
+            row_names = FALSE, col_names = TRUE,
+            start_row = 46, 
+            start_col = 2)
 
 openxlsx2::wb_save(wb, "output/FloodedLands-Output_90-23_clean.xlsx", overwrite = TRUE) ## save changes to excel
 
@@ -6652,6 +6649,8 @@ The net effect of these recalculations was an average annual change in CH~4~ and
 ### Planned Improvements
 
 Default emission factors for ponds were derived from a global dataset that include few measurements from U.S. systems. To assess the accuracy of these defaults, the EPA is conducting a survey of GHG emissions from U.S. ponds from 2024 - 2026. The results of this survey will determine if default or country specific EFs will be used for future inventories. 
+
+# References
 
 ```{r clean markdown script, results="hide"}
 
