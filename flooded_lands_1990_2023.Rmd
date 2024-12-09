@@ -54,6 +54,14 @@ conflict_prefer("filter", "dplyr")
 print(sessionInfo())
 ```
 
+```{r final_year, message=FALSE, warning=FALSE, results="hide"}
+
+# Assign final year of report to a variable for use in code and text
+# Final year = current year minus one
+final_year <- year(Sys.Date())-1
+
+```
+
 # <!--PRIMARY CALCULATIONS--NOT INCLUDED IN REPORT-->
 
 ## <!--Flooded Lands Data Sources-->
@@ -1399,11 +1407,11 @@ Nitrous oxide emissions from flooded lands are largely related to input of organ
 
 ## Emissions from Flooded Land Remaining Flooded Land-Reservoirs
 
-Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In 2023, the United States and Puerto Rico contained `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2023) %>% summarize(tot.area = sum(.) / 1000000) %>% pull() %>% round(., 1)` million hectares of reservoirs in the flooded land remaining flooded land category. These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull() %>% round(., 1)` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)[@IPCC2019Refinement].
+Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. In `r final_year`, the United States and Puerto Rico contained `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir") %>% select(area2023) %>% summarize(tot.area = sum(.) / 1000000) %>% pull() %>% round(., 1)` million hectares of reservoirs in the flooded land remaining flooded land category. These reservoirs are distributed across all `r fl.cl.area.state.type %>% filter(lu == "Flooded Land Remaining Flooded Land", type == "reservoir")  %>% summarize(climate.zones = length(unique(climate))) %>% pull() %>% round(., 1)` of the aggregated climate zones used to define flooded land emission factors (Figure 6-10)[@IPCC2019Refinement].
 
 ### <!--FIGURE: Climate zone and Flooded lands map-->
 
-**Figure 6-10: U.S. Reservoirs (black polygons) in the Flooded Land Remaining Flooded Land Category in 2023**
+**Figure 6-10: U.S. Reservoirs (black polygons) in the Flooded Land Remaining Flooded Land Category in `r final_year`**
 
 ```{r, results="hide"}
 
@@ -1843,13 +1851,13 @@ tx_fl_la_prop_ch4 <-
   100 # multiply by 100 to convert to percent
 ```
 
-Methane emissions from reservoirs in Texas, Florida, and Louisiana (Figure 6-11, Table 6-82) compose `r round(tx_fl_la_prop_ch4, 1)` percent of national CH~4~ emissions from reservoirs in 2023. Emissions from these states are particularly high due to 1) the large expanse of reservoirs in these states (Table 6-85) and 2) the high CH~4~ emission factor for the tropical dry/montane and topical moist climate zones which encompass a majority of the flooded land area in these states (Figure 6-10, Table 6-83).
+Methane emissions from reservoirs in Texas, Florida, and Louisiana (Figure 6-11, Table 6-82) compose `r round(tx_fl_la_prop_ch4, 1)` percent of national CH~4~ emissions from reservoirs in `r final_year`. Emissions from these states are particularly high due to 1) the large expanse of reservoirs in these states (Table 6-85) and 2) the high CH~4~ emission factor for the tropical dry/montane and topical moist climate zones which encompass a majority of the flooded land area in these states (Figure 6-10, Table 6-83).
 
-Methane emissions from reservoirs in flooded land remaining flooded land increased `r ((( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x2023) * 1000) %>% pull() ) / ( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x1990) * 1000) %>% pull() ) ) - 1) %>% "*"(100) %>% round(1)` percent from 1990 to 2023 due to the matriculation of reservoirs in land converted to flooded land to flooded land remaining flooded land.
+Methane emissions from reservoirs in flooded land remaining flooded land increased `r ((( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x2023) * 1000) %>% pull() ) / ( flrfl.ch4.national.subtype.kt.ch4.gt  %>% janitor::clean_names() %>% summarize(ch4.total.tonnes.y = sum(x1990) * 1000) %>% pull() ) ) - 1) %>% "*"(100) %>% round(1)` percent from 1990 to `r final_year` due to the matriculation of reservoirs in land converted to flooded land to flooded land remaining flooded land.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
-**Figure 6-11: Total CH~4~ Emissions (Downstream + Surface) from Reservoirs in Flooded Land Remaining Flooded Land in 2023 (kt CH~4~)**
+**Figure 6-11: Total CH~4~ Emissions (Downstream + Surface) from Reservoirs in Flooded Land Remaining Flooded Land in `r final_year` (kt CH~4~)**
 
 ```{r, results="hide"}
 # Calculate total reservoir CH4 emissions by state for 2023
@@ -2061,7 +2069,7 @@ flrfl.ch4.2023.reservoir.state.gt <-
 
 # Create GT table of data
 gt(flrfl.ch4.2023.reservoir.state.gt, rowname_col = "Source") %>%
-  tab_header(title = md( "Table 6-82: Surface and Downstream CH<sub>4</sub> Emissions from Reservoirs in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
+  tab_header(title = md(paste0("Table 6-82: Surface and Downstream CH<sub>4</sub> Emissions from Reservoirs in Flooded Land Remaining Flooded Land in", final_year, "(kt CH<sub>4</sub>)"))) %>%
   cols_label(name = "State", 
              ch4.surface.ktonnes.y = "Surface", 
              ch4.dn.ktonnes.y = "Downstream", 
@@ -2184,7 +2192,7 @@ Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Cens
 
 [^6]: See <https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html>.
 
-The surface area of reservoirs in flooded land remaining flooded land increased by `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990|2023"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2023 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to 2023 (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
+The surface area of reservoirs in flooded land remaining flooded land increased by `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Flooded Land Remaining Flooded Land") %>% select(matches(c("1990", final_year))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.increase = (((area2023 - area1990)/area1990)*100)) %>% pull(percent.increase) %>% round(., 1)` percent from 1990 to `r final_year` (Table 6-84) due to reservoirs matriculating into flooded land remaining flooded land when they reached 20 years of age.
 
 ###### <!--TABLE:: National Flooded Land Area for Reservoirs-->
 
@@ -2194,7 +2202,7 @@ fl.cl.area.state.type.gt <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>% # reservoir is only subtype in type == reservoir, thus not necessary
   summarize(across(contains("area"), ~round(sum(.)/1000000, 2))) %>%
   arrange(desc(subtype)) %>%
@@ -2241,7 +2249,7 @@ flrfl.area.reservoir.state.gt <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023",final_year))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.)/1000000)) 
 
@@ -2305,7 +2313,7 @@ flrfl.area.reservoir.state.all <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, type, matches(paste(1990:2023, collapse = "|"))) %>%
+  select(name, type, matches(paste(1990:final_year, collapse = "|"))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.)/1000000)) %>%
   rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
@@ -2335,7 +2343,7 @@ Uncertainty in estimates of CH~4~ emissions from reservoirs in flooded land rema
 # Current year for Markdown and Excel
 ch4.co2.uncertainty.gt <- ch4.co2.uncertainty.mean.table.total %>%
   filter(lu == "Flooded Land Remaining Flooded Land", 
-         type == "reservoir", year == 2023) %>%
+         type == "reservoir", year == final_year) %>%
   select(contains("ch4")) %>%
   pivot_longer(cols = contains("ch4"), names_to = "variable", values_to = "value") %>%
   mutate(subtype = if_else(str_detect(variable, "surface"), 
@@ -2397,7 +2405,7 @@ in Flooded Land Remaining Flooded Land")) %>%
   tab_stubhead(label = "Source") %>%
   rows_add(subtype = "Reservoir", .before = 1) %>%
   tab_spanner(label = "Gas", columns = 1:2, level = 2) %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = paste0(final_year, " Emission Estimate"), columns = 3:3, level = 2) %>%
   tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
               columns = 4:7, level = 2, id = "range") %>%
   tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
@@ -2527,7 +2535,7 @@ The IPCC [@IPCC2019Refinement] provides emission factors for several types of �
 
 Canals and ditches (terms are used interchangeably) are linear water features constructed to transport water (i.e., stormwater drainage, aqueduct), irrigate or drain land, connect two or more bodies of water, or to serve as a waterway for watercraft. The geometry and construction of canals and ditches varies widely and includes narrow earthen channels (\<1 m wide) and concrete lined aqueducts in excess of 50 m wide. Canals and ditches can be extensive in many agricultural, forest and settlement areas, and can be significant sources of emissions in some circumstances.
 
-Methane emissions from freshwater ponds in flooded land remaining flooded land increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2023") %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("2023") %>% pull()) %>% "*"(100) %>% round(1)` percent from 1990 to 2023. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
+Methane emissions from freshwater ponds in flooded land remaining flooded land increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(final_year) %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(final_year) %>% pull()) %>% "*"(100) %>% round(1)` percent from 1990 to `r final_year`. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
 
 ### <!--TABLE:: National level CH~4~ flux table-->
 
@@ -2542,7 +2550,7 @@ flrfl.ch4.national.subtype.gt <-
   flrfl.ch4.national.subtype %>% 
   filter(subtype != "reservoir", # NOT reservoir
          flux.type == "total") %>%
-  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
+  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
   # convert kt to MMT CO2 eq (using GWP of 28)
   mutate(across(where(is.numeric), ~ num((.x/1000) * 28, digits = 1))) %>%
   arrange(Activity) %>%
@@ -2619,7 +2627,7 @@ flrfl.ch4.national.subtype.gt <-
   flrfl.ch4.national.subtype %>% 
   filter(subtype != "reservoir", # NOT reservoir
          flux.type == "total") %>%
-  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
+  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
   mutate(across(where(is.numeric), ~ num(.x, digits = 1))) %>%
   arrange(Activity) %>%
   select(-subtype) 
@@ -2718,8 +2726,8 @@ flrfl.ch4.2023.ocwb.state.gt <-
 gt(flrfl.ch4.2023.ocwb.state.gt %>% 
      ungroup %>% 
      rename(State = name), rowname_col = "State") %>%
-  tab_header(title = md(
-    "Table 6-89: CH<sub>4</sub> Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land in 2023 (kt CH<sub>4</sub>)")) %>%
+  tab_header(title = md(paste0(
+    "Table 6-89: CH<sub>4</sub> Emissions from Other Constructed Waterbodies in Flooded Land Remaining Flooded Land in", final_year,  "(kt CH<sub>4</sub>)"))) %>%
   cols_label(ktonnes_ch4_canals_and_ditches = "Canals and Ditches",
              ktonnes_ch4_freshwater_pond	 = "Freshwater Ponds",
              ch4.total.ktonnes.y = "Total") %>%
@@ -2823,7 +2831,7 @@ gt(flrfl.ch4.2023.ocwb.state.gt %>%
 
 ### <!--FIGURE: Emissions by state-->
 
-**Figure 6-13: 2023 CH~4~ Emissions from A) Ditches and Canals and B) Freshwater Ponds in Flooded Land Remaining Flooded Land (kt CH~4~)**
+**Figure 6-13: `r final_year` CH~4~ Emissions from A) Ditches and Canals and B) Freshwater Ponds in Flooded Land Remaining Flooded Land (kt CH~4~)**
 
 ```{r, results="hide"}
 # 1.  CALCULATE TOTAL OCWB CH4 EMISSIONS BY SUBTYPE AND STATE FOR 2023------------------
@@ -3226,7 +3234,7 @@ Surface areas for other constructed waterbodies were taken from NHD, NWI or the 
 
 The age of other constructed waterbody features was determined by assuming the waterbody was created the same year as a nearby (up to 200 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series. No canal/ditch features were associated with a nearby dam, therefore all canal/ditch features were assumed to be greater than 20-years old throughout the time series.
 
-For the year 2023, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of canals and ditches in flooded land remaining flooded land. The surface area of freshwater ponds increased by `r (fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull) %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha from 1990 to 2023 due to flooded lands matriculating from land converted to flooded land to flooded land remaining flooded land. All canals and ditches were assumed to be greater than 20-years old throughout the time series, thus the surface area of these flooded lands is constant throughout the time series.
+For the year `r final_year`, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of freshwater ponds and `r fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "canals and ditches") %>% summarize(area2022 = sum(area2022)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of canals and ditches in flooded land remaining flooded land. The surface area of freshwater ponds increased by `r (fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2022)) %>% pull() - fl.cl.area.state.type  %>%  filter(lu == "Flooded Land Remaining Flooded Land", subtype == "freshwater pond") %>% summarize(area1990 = sum(area1990)) %>% pull) %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha from 1990 to `r final_year` due to flooded lands matriculating from land converted to flooded land to flooded land remaining flooded land. All canals and ditches were assumed to be greater than 20-years old throughout the time series, thus the surface area of these flooded lands is constant throughout the time series.
 
 ###### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies: abbreviated time series-->
 
@@ -3237,7 +3245,7 @@ flrfl.ocwb.area.national.gt <-
   fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>%
   summarize(across(contains("area"), sum)) %>%
   arrange(subtype) 
@@ -3305,7 +3313,7 @@ gt(flrfl.ocwb.area.national.gt %>%
 flrfl.ocwb.area.national.all <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(subtype, matches(paste0(1990:2023, collapse = "|"))) %>%
+  select(subtype, matches(paste0(1990:final_year, collapse = "|"))) %>%
   group_by(subtype) %>%
   summarize(across(contains("area"), sum)) %>%
   arrange(subtype)%>%
@@ -3330,7 +3338,7 @@ Canals and ditches in the conterminous U.S. are most abundant in the Gulf Coast 
 
 ###### <!--FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State-->
 
-**Figure 6-16: 2023 Surface Area of A) Ditches and Canals and B) Freshwater Ponds in Flooded Land Remaining Flooded Land (ha)**
+**Figure 6-16: `r final_year` Surface Area of A) Ditches and Canals and B) Freshwater Ponds in Flooded Land Remaining Flooded Land (ha)**
 
 ```{r, results="hide"}
 # 1. Make other constructed waterbodies surface area table---------------
@@ -3665,7 +3673,7 @@ cat('
 flrfl.canal.area.by.state.gt <- fl.cl.area.state.type %>%
   filter(subtype == "canals and ditches",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.))) 
 
@@ -3722,7 +3730,7 @@ gt(flrfl.canal.area.by.state.gt %>% rename(State = name) %>%
 flrfl.canal.area.by.state.all <- fl.cl.area.state.type %>%
   filter(subtype == "canals and ditches",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, matches(paste0(1990:2023, collapse = "|"))) %>%
+  select(name, matches(paste0(1990:final_year, collapse = "|"))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.))) %>%
   rename_with(~gsub("area", "", .), .cols = contains("area")) %>%
@@ -3747,7 +3755,7 @@ Compare total row to FLRFL.ocwb.area.national-->
 flrfl.pond.area.by.state.gt <- fl.cl.area.state.type %>%
   filter(subtype == "freshwater pond",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.)))
   
@@ -3836,7 +3844,7 @@ Uncertainty in estimates of CH~4~ emissions from other constructed waterbodies (
 # Current year for Markdown and Excel
 ch4.co2.uncertainty.other.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Flooded Land Remaining Flooded Land", 
-         subtype != "reservoir", year == 2023) %>%
+         subtype != "reservoir", year == final_year) %>%
   select(subtype, 
          ch4_est = ch4.surface.mmt.co2.eq.y,
          ch4_min = ch4.surface.mmt.co2.eq.y_min,
@@ -3874,7 +3882,7 @@ gt(ch4.co2.uncertainty.other.gt,
   tab_stubhead(label = "Source") %>%
       tab_spanner(label = "Source", columns = 1:1, level = 1) %>%
   tab_spanner(label = "Gas", columns = 2:2, level = 1) %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = paste0(final_year, " Emission Estimate"), columns = 3:3, level = 2) %>%
   tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
                 columns = 4:7, level = 2, id = "range") %>%
   tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
@@ -4021,20 +4029,20 @@ Land that has been flooded for 20 years or greater is defined as flooded land re
 
 Nitrous oxide emissions from flooded lands are largely related to inputs of organic or inorganic nitrogen from the watershed. These inputs from runoff/leaching/deposition are largely driven by anthropogenic activities such as land-use change, wastewater disposal or fertilizer application in the watershed or application of fertilizer or feed in aquaculture. These emissions are not included here to avoid double-counting N~2~O emissions which are captured in other source categories, such as indirect N~2~O emissions from managed soils (Section 5.4, Agricultural Soil Management) and wastewater management (Section 7.2, Wastewater Treatment and Discharge).
 
-Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. Lakes converted into reservoirs without substantial changes in water surface area or water residence times are not considered to be managed flooded land (see Area Estimates below) [@IPCC2019Refinement]. In 2023, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2023, na.rm = TRUE)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of reservoir surface area in land converted to flooded land (Tables 6-22, 6-23;see Methodology and Time-Series Consistency below for calculation details) distributed across `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) [@IPCC2019Refinement].
+Reservoirs are designed to store water for a wide range of purposes including hydropower, flood control, drinking water, and irrigation. Lakes converted into reservoirs without substantial changes in water surface area or water residence times are not considered to be managed flooded land (see Area Estimates below) [@IPCC2019Refinement]. In `r final_year`, the United States and Puerto Rico hosted `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(tot.area = sum(area2023, na.rm = TRUE)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of reservoir surface area in land converted to flooded land (Tables 6-22, 6-23;see Methodology and Time-Series Consistency below for calculation details) distributed across `r fl.cl.area.state.type %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir") %>% summarize(climate.zones = length(unique(climate))) %>% pull()` of the aggregated climate zones used to define flooded land emission factors (Figure 6-17) [@IPCC2019Refinement].
 
 ## Emissions from Land Converted to Flooded Land - Reservoirs
 
 ### <!--FIGURE::  Climate zone and Flooded lands map-->
 
-**Figure 6-17: U.S. Reservoirs (black polygons) in the Land Converted to Flooded Land Category in 2023**
+**Figure 6-17: U.S. Reservoirs (black polygons) in the Land Converted to Flooded Land Category in `r final_year`**
 
 ```{r, results="hide"}
 
 # BREAK GEOGRAPHIES FOR INSETS AND PROJECT----------
 # Define LCFL in 2023
 lcfl.2023 <- fl.sf %>% # 
-  mutate(age = 2023 - year, # 2023 year
+  mutate(age = final_year - year, # 2023 year
          # lu in 2023
          lu = case_when(age > 20 | is.na(age) ~ "Flooded Land Remaining Flooded Land", # keep NA
                         TRUE ~ "Land Converted to Flooded Land")) %>% 
@@ -4267,7 +4275,7 @@ Methane and CO~2~ are produced in reservoirs through the natural breakdown of or
 # CH4: MMT CO2 equivalent
 lcfl.ghg.national.subtype.gt.1 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", flux.type != "total", gas == "ch4") %>%
-  select(Source = Activity, "1990", "2005", as.character(2019:2023)) %>%
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
   mutate(across(where(is.numeric), ~round((.x/1000) * 28))) # kt CH4 to MMT CO2 equivalent
 
 
@@ -4327,7 +4335,7 @@ gt(lcfl.ghg.national.subtype.gt.1, rowname_col = "Source") %>%
 # CH4: kt CH4
 lcfl.ghg.national.subtype.gt.2 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", flux.type != "total", gas == "ch4") %>%
-  select(Source = Activity, "1990", "2005", as.character(2019:2023)) %>%
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
   mutate(across(where(is.numeric), round)) 
 
 # Create a GT table of the data
@@ -4388,7 +4396,7 @@ gt(lcfl.ghg.national.subtype.gt.2,
 # CO2: MMT CO2
 lcfl.ghg.national.subtype.gt.3 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", gas == "co2", units == "mmt") %>%
-  select(Source = Activity, "1990", "2005", as.character(2019:2023)) %>%
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
   mutate(across(where(is.numeric), ~ num(.x, digits = 1))) 
 
 
@@ -4419,7 +4427,7 @@ gt(lcfl.ghg.national.subtype.gt.3) %>%
 # CO2: MMT C
 lcfl.ghg.national.subtype.gt.4 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", gas == "co2", units == "mmt") %>%
-  select(Source = Activity, "1990", "2005", as.character(2019:2023)) %>%
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
   mutate(across(where(is.numeric), ~ num(.x, digits = 1))) 
 
 # Create a GT table of the data
@@ -4479,13 +4487,13 @@ lcfl.ghg.2023.reservoir.mn.ratio <- fl.e$`2023` %>%
 
 
 ```
-Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(.)` reservoirs created after 2001 which impounded `r fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck("2023") %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
+Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(.)` reservoirs created after 2001 which impounded `r fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck(final_year) %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
 
-North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck("2023") %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management. The dams have not substantially increased the surface area of these reservoirs, but serve to reduce flooding and/or maintain minimum water levels for recreation, thereby affecting water residence time.
+North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management. The dams have not substantially increased the surface area of these reservoirs, but serve to reduce flooding and/or maintain minimum water levels for recreation, thereby affecting water residence time.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
-**Figure 6-18: 2023 A) CH~4~ and B) CO~2~ Emissions from U.S. Reservoirs in Land Converted to Flooded Land**
+**Figure 6-18: `r final_year` A) CH~4~ and B) CO~2~ Emissions from U.S. Reservoirs in Land Converted to Flooded Land**
 
 ```{r, results="hide"}
 # 1.  CALCULATE TOTAL RESERVOIR CH4 AND CO2 BY STATE FOR 2023-------------
@@ -4832,8 +4840,8 @@ gt(lcfl.res.ghg.by.state.gt %>%
      ungroup %>% 
      select(State = name, contains("ktonnes")), 
    rowname_col = "State") %>%
-  tab_header(title = md(
-    "Table 6-105: Methane and CO<sub>2</sub> Emissions from Reservoirs in Land Converted to Flooded Land in 2023 (kt CH<sub>4</sub>; kt CO<sub>2</sub>)")) %>%
+  tab_header(title = md(paste(
+    "Table 6-105: Methane and CO<sub>2</sub> Emissions from Reservoirs in Land Converted to Flooded Land in", final_year, "(kt CH<sub>4</sub>; kt CO<sub>2</sub>)"))) %>%
   cols_label(ch4.surface.ktonnes.y = "Surface",
     ch4.dn.ktonnes.y = "Downstream",
  	  ch4.total.ktonnes.y = "Total", 
@@ -4973,7 +4981,7 @@ Reservoirs were disaggregated by state (using boundaries from the 2016 U.S. Cens
 
 [^18]: See <https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html>.
 
-The surface area of reservoirs in land converted to flooded land decreased by nearly `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Land Converted to Flooded Land") %>% select(matches(c("1990|2023"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.decrease = (((area1990 - area2023)/area1990)*100)) %>% pull(percent.decrease) %>% round(., 1)` percent from 1990 to 2023 (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in 2023,[^19] versus 552 in 1990 (Figure 6-20).
+The surface area of reservoirs in land converted to flooded land decreased by nearly `r fl.cl.area.state.type %>% filter(type == "reservoir", lu == "Land Converted to Flooded Land") %>% select(matches(c("1990", final_year))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.decrease = (((area1990 - area2023)/area1990)*100)) %>% pull(percent.decrease) %>% round(., 1)` percent from 1990 to `r final_year` (Table 6-107). This is due to reservoirs that were less than 20-years old at the beginning of time series entering the flooded land remaining flooded land category when they exceeded 20 years of age. The rate at which flooded land has aged out of the land converted to flooded land category has outpaced the rate of new dam construction. New dam construction has slowed considerably during the time series with only nine new dams constructed in `r final_year`,[^19] versus 552 in 1990 (Figure 6-20).
 
 [^19]: See <https://nid.sec.usace.army.mil>.
 
@@ -4985,7 +4993,7 @@ fl.cl.area.state.type.gt.2 <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Land Converted to Flooded Land") %>%
-  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>% # reservoir is only subtype in type == reservoir, thus not necessary
   summarize(across(contains("area"), ~round(sum(.)/1000, 2))) %>% # thousands of ha
   arrange(desc(subtype)) %>%
@@ -5040,7 +5048,7 @@ png("output/figures/newDams.png", res = 800,  width = 5, height = 3.9, units = "
  # width = 4.77/1.8, height = 4.99/2
 nid %>%
   mutate(yearCompleted = as.numeric(yearCompleted)) %>%
-  filter(yearCompleted >= 1990 & yearCompleted <= 2023) %>%
+  filter(yearCompleted >= 1990 & yearCompleted <= final_year) %>%
   group_by(yearCompleted) %>%
   summarize(n_year = n()) %>%
   ungroup() %>%
@@ -5076,7 +5084,7 @@ lcfl.res.area.by.state.gt.2 <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Land Converted to Flooded Land") %>%
-  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(name, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>% #thousands of hectares
   full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
@@ -5146,7 +5154,7 @@ lcfl.res.area.by.state.all <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Land Converted to Flooded Land") %>%
-  select(name, matches(paste0(1990:2023, collapse = "|"))) %>%
+  select(name, matches(paste0(1990:final_year, collapse = "|"))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(., na.rm = TRUE)/1000)) %>% #thousands of hectares
   full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
@@ -5183,7 +5191,7 @@ Uncertainty in estimates of CH~4~ and CO~2~ emissions from reservoirs on land co
 # Current year for Markdown and Excel
 ch4.co2.uncertainty.converted.res.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Land Converted to Flooded Land", 
-         subtype == "reservoir", year == 2023) %>%
+         subtype == "reservoir", year == final_year) %>%
   select(-lu, -year, -contains("total")) %>%
   pivot_longer(cols = !subtype, names_to = "variable", 
                values_to = "value") %>%
@@ -5415,7 +5423,7 @@ Freshwater ponds are the only type of flooded lands within the “other construc
 
 IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” The IPCC “Decision tree for types of Flooded Land” ([@IPCC2019Refinement], Fig. 7.2) elaborates on this description by defining waterbodies less than 8 ha as a subset of “other constructed waterbodies.” For this *Inventory*, ponds are defined as managed flooded land not identified as “canal/ditch” (see Methods below) with surface area less than 8 ha. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH~4~ emission rates than the latter. Activity data on pond salinity is not uniformly available for the United States and all ponds in land converted to flooded land are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are sites of substantial CH~4~ and CO~2~ emissions from anaerobic sediments.
 
-Methane and CO~2~ emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("2023") %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("2023") %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` percent, respectively, from 1990 to 2023 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In 2023, states in the Great Plains region generally had the greatest CO~2~ and CH~4~ emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the greatest emissions of all states, partly due to the relatively high CO~2~ emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).
+Methane and CO~2~ emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select(final_year) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select(final_year) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` percent, respectively, from 1990 to 2023 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In `r final_year`, states in the Great Plains region generally had the greatest CO~2~ and CH~4~ emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the greatest emissions of all states, partly due to the relatively high CO~2~ emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).
 
 ### <!--TABLE:: National level CH~4~ and CO~2~ flux table-->
 
@@ -5429,7 +5437,7 @@ lcfl.ghg.national.subtype.gt.5 <- lcfl.ghg.national.subtype %>%
   filter(subtype %in% c("canals and ditches", "freshwater pond"),
          flux.type == "total",
          gas == "ch4") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
+  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
   mutate(across(where(is.numeric), ~ num((.x/1000) * 28, digits = 1))) 
 
 
@@ -5468,7 +5476,7 @@ lcfl.ghg.national.subtype.gt.6 <- lcfl.ghg.national.subtype %>%
   filter(subtype %in% c("canals and ditches", "freshwater pond"),
          flux.type == "total",
          gas == "ch4") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023")
+  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year)
 
 
 # Create a GT table of the data
@@ -5507,7 +5515,7 @@ lcfl.ghg.national.subtype.gt.7 <- lcfl.ghg.national.subtype %>%
          flux.type == "surface",
          gas == "co2",
          units == "mmt") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023") 
+  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) 
 
 
 # Create a GT table of the data
@@ -5546,7 +5554,7 @@ lcfl.ghg.national.subtype.gt.8 <- lcfl.ghg.national.subtype %>%
          flux.type == "surface",
          gas == "co2",
          units == "mmt") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
+  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
   mutate(across(where(is.numeric), ~ num(.x * (12/44), digits = 2)))# MMT of C!
   
   # Create a GT table of the data
@@ -5708,7 +5716,7 @@ gt(lcfl.ocwb.ghg.state.2023  %>%
 
 ### <!--FIGURE 6-21:: Emissions by state-->
 
-**Figure 6-21: 2023 A) CH~4~ and B) CO~2~ Emissions from Other Constructed Waterbodies (Freshwater Ponds) in Land Converted to Flooded Land (MT CO~2~ Eq.)**
+**Figure 6-21: `r `final_year` A) CH~4~ and B) CO~2~ Emissions from Other Constructed Waterbodies (Freshwater Ponds) in Land Converted to Flooded Land (MT CO~2~ Eq.)**
 
 ```{r, results="hide"}
 
@@ -6091,7 +6099,7 @@ Surface areas for other constructed waterbodies were taken from NHD, NWI or the 
 
 The age of other constructed waterbody features was determined by assuming the waterbody was created the same year as a nearby (up to 200 m) NID feature. If no nearby NID feature was identified, it was assumed the waterbody was greater than 20-years old throughout the time series. No canal/ditch features were associated with a nearby dam, therefore all canal/ditch features were assumed to be greater than 20-years old through the time series.
 
-For the year 2023, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2023, na.rm = TRUE)) %>% pull() %>% round()` ha of freshwater ponds in land converted to flooded land. The surface area of freshwater ponds decreased by `r fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Land Converted to Flooded Land") %>% select(matches(c("1990|2023"))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.decrease = (((area1990 - area2023)/area1990)*100)) %>% pull(percent.decrease) %>% round(., 1)` percent from 1990 to 2023 due to flooded lands aging out of land converted to flooded land more quickly than new flooded lands entered the category. Freshwater ponds in year 2023 of the *Inventory* are most abundant in Nebraska, South Dakota, and Kansas (Figure 6-22).
+For the year `r final_year`, this *Inventory* contains `r fl.cl.area.state.type  %>%  filter(lu == "Land Converted to Flooded Land", subtype == "freshwater pond") %>% summarize(area2022 = sum(area2023, na.rm = TRUE)) %>% pull() %>% round()` ha of freshwater ponds in land converted to flooded land. The surface area of freshwater ponds decreased by `r fl.cl.area.state.type %>% filter(subtype == "freshwater pond", lu == "Land Converted to Flooded Land") %>% select(matches(c("1990", final_year))) %>% summarize(across(contains("area"), ~(sum(.)/1000000))) %>% mutate(percent.decrease = (((area1990 - area2023)/area1990)*100)) %>% pull(percent.decrease) %>% round(., 1)` percent from 1990 to `r final_year` due to flooded lands aging out of land converted to flooded land more quickly than new flooded lands entered the category. Freshwater ponds in year `r final_year` of the *Inventory* are most abundant in Nebraska, South Dakota, and Kansas (Figure 6-22).
 
 ##### <!--TABLE:: National Flooded Land Area for Other Constructed Waterbodies-->
 
@@ -6099,7 +6107,7 @@ For the year 2023, this *Inventory* contains `r fl.cl.area.state.type  %>%  filt
 fl.cl.area.state.type.gt.3 <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
          lu == "Land Converted to Flooded Land") %>%
-  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>%
   summarize(across(contains("area"), \(x) sum(x, na.rm = TRUE))) %>%
   arrange(subtype) %>%
@@ -6141,7 +6149,7 @@ fl.cl.area.state.type.gt.3 <- fl.cl.area.state.type %>%
 
 ##### <!--FIGURE:: Flooded Land Area for Other Constructed Waterbodies by State-->
 
-**Figure 6-22: Surface Area of Other Constructed Waterbodies in Land Converted to Flooded Land (ha) in 2023**
+**Figure 6-22: Surface Area of Other Constructed Waterbodies in Land Converted to Flooded Land (ha) in `r final_year`**
 
 ```{r, results="hide"}
 # 1.  construct other constructed waterbodies surface area table
@@ -6347,7 +6355,7 @@ knitr::include_graphics("output/figures/LCFL.ocwb.pond.2023.area.png")
 lcfl.ocwb.area.state.gt <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
          lu == "Land Converted to Flooded Land") %>%
-  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023"))) %>%
+  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(name) %>% # 
   summarize(across(contains("area"), ~sum(., na.rm = TRUE))) %>%
   full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
@@ -6415,7 +6423,7 @@ gt(lcfl.ocwb.area.state.gt %>%
 lcfl.ocwb.area.state.all <- fl.cl.area.state.type %>%
   filter(type == "other constructed waterbodies",
          lu == "Land Converted to Flooded Land") %>%
-  select(name, type, matches(paste0(1990:2023, collapse = "|"))) %>%
+  select(name, type, matches(paste0(1990:final_year, collapse = "|"))) %>%
   group_by(name) %>% # 
   summarize(across(contains("area"), ~sum(., na.rm = TRUE))) %>%
   full_join(., st_crosswalk_no_GU_VQ %>% select(name)) %>%
@@ -6449,7 +6457,7 @@ Uncertainty in estimates of CO~2~ and CH~4~ emissions from land converted to flo
 # Current year for Markdown and Excel
 ch4.co2.uncertainty.converted.gt <- ch4.co2.uncertainty.mean.table %>%
   filter(lu == "Land Converted to Flooded Land", 
-         subtype == "freshwater pond", year == 2023) %>%
+         subtype == "freshwater pond", year == final_year) %>%
   select(-lu, -year, -contains("total"), -contains("dn")) %>%
   pivot_longer(cols = !subtype, names_to = "variable", values_to = "value") %>%
   mutate(Gas = if_else(str_detect(variable, "ch4"), "CH4", "CO2")) %>%
@@ -6508,7 +6516,7 @@ gt(ch4.co2.uncertainty.converted.gt,
   tab_stubhead(label = "Source") %>%
   tab_spanner(label = "Source", columns = 1, level = 1) %>%
   tab_spanner(label = "Gas", columns = 2, level = 1, id = "gas") %>%
-  tab_spanner(label = "2023 Emission Estimate", columns = 3:3, level = 2) %>%
+  tab_spanner(label = paste0(final_year, " Emission Estimate"), columns = 3:3, level = 2) %>%
   tab_spanner(label = "Uncertainty Range Relative to Emission Estimate", 
               columns = 4:7, level = 2, id = "range") %>%
   tab_spanner(label = "(MMT CO2 Eq.)", columns = 3:3, level = 1) %>%
@@ -6595,12 +6603,12 @@ General QA/QC procedures were applied to activity data, documentation, and emiss
 ```{r recalculations_lcfl_ocwb, include=FALSE, warning=FALSE, message=FALSE}
 # GHG total (MMT CO2 Eq) in 1990-2023 Inventory.  These values are contrasted with those from the 1990-2022 Inventory.
 
-# LCFL - ocwb CO2 CH4 from current inventory: 1990-2022
+# LCFL - ocwb CO2 CH4 from current inventory: 1990-previous year
 lcfl.ch4.co2.ocwb.national.current.inventory <- 
 lcfl.ghg.national.subtype %>% 
   filter((subtype != "reservoir" & (gas == "co2" & units == "mmt")) |
            (subtype != "reservoir" & (gas == "ch4" & flux.type == "total"))) %>%
-  select(gas, units, as.character(1990:2022)) %>%
+  select(gas, units, as.character(1990:final_year-1)) %>%
   pivot_longer(!(gas:units), names_to = "year", values_to = "flux") %>%
   mutate(flux = case_when(gas == "ch4" ~ (flux/1000) * 28, # convert CH4 to mmt CO2-eq
                           TRUE ~ flux)) %>%
@@ -6616,7 +6624,7 @@ lcfl.ch4.co2.ocwb.national.previous.inventory <-
     path = "inputData/FloodedLands-Output_90-22_07Nov2023.xlsx", 
     sheet = "7.3.2_LCFL_summary", 
     range = "C34:AI48",
-    col_names = as.character(1990:2022)) %>%
+    col_names = as.character(1990:final_year-1)) %>%
   slice(c(1,15)) %>%
   mutate(across(everything(), as.numeric)) %>%
   summarise(across(everything(), sum))
@@ -6642,9 +6650,9 @@ lcfl.ch4.co2.ocwb.national.change.mass <-
 #   geom_point()
 ```
 
-The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current *Inventory* contains `r new.dams` new dams relative to the version used for the previous (1990 through 2022) *Inventory*. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current *Inventory* has major updates for New Mexico, Ohio, Maryland, Michigan, and West Virginia.
+The National Inventory of Dams (NID) data are updated regularly. The version of NID used for the current *Inventory* contains `r new.dams` new dams relative to the version used for the previous (1990 through `r final_year-1`) *Inventory*. Similarly, the National Wetlands Inventory (NWI) is periodically updated. The NWI version used for the current *Inventory* has major updates for New Mexico, Ohio, Maryland, Michigan, and West Virginia.
 
-The net effect of these recalculations was an average annual change in CH~4~ and CO~2~ emissions from other constructed waterbodies of `r  lcfl.ch4.co2.ocwb.national.change.mass %>% rowwise %>% summarize(p = mean(c_across(everything()))) %>% pull %>% round(3)` MMT CO~2~ Eq., or `r lcfl.ch4.co2.ocwb.national.change.perc %>% rowwise %>% summarize(p = mean(c_across(everything()))) %>% pull %>% round(1)` percent, over the time series from 1990 to 2022 compared to the previous *Inventory*.
+The net effect of these recalculations was an average annual change in CH~4~ and CO~2~ emissions from other constructed waterbodies of `r  lcfl.ch4.co2.ocwb.national.change.mass %>% rowwise %>% summarize(p = mean(c_across(everything()))) %>% pull %>% round(3)` MMT CO~2~ Eq., or `r lcfl.ch4.co2.ocwb.national.change.perc %>% rowwise %>% summarize(p = mean(c_across(everything()))) %>% pull %>% round(1)` percent, over the time series from 1990 to `r final_year-1` compared to the previous *Inventory*.
 
 ### Planned Improvements
 
