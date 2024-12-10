@@ -655,8 +655,23 @@ fl.error.sim.subtype <- list()
 fl.error.sim.type <- list()
 set.seed(3452) # make it reproducible
 
+
+
 tic() # map: 85 seconds for 10 simulations, 1000 = 142 minutes, 10,000 = 23 hours, much longer with future_map
-for (i in 1:10) { #
+
+# Simulations take hours to run, so we save them as a data object and load into environment 
+
+# Define filpath for the save simulations 
+sims_file_path <- "simulations.rds" 
+
+# Check if simulations file exists
+if (file.exists(sims_file_path)) {
+  # If it exists, load it
+  fl.error.sim.i <- readRDS(sims_file_path)
+  message("Data object loaded from file.")
+  # If it doesn't exist, then run the simulations
+} else {
+for (i in 1:10000) { #
   print(i)
   fl.error.sim.i <- map(fl, function(x) { x %>%
       mutate(co2.tonnes.ha.y = runif(nrow(x), co2.tonnes.ha.y.lwr, co2.tonnes.ha.y.upr),
@@ -674,7 +689,11 @@ for (i in 1:10) { #
                                       ch4.surface.tonnes.y * dn.ef),
              ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y)
   })
-
+}
+  # Save the simulations data object as 'simulations.rds'
+  saveRDS(fl.error.sim.i, file = sims_file_path)
+  message("Simulations data object saved to file.")
+}
 
   # Aggregate by subtype
   fl.error.sim.subtype[[i]] <- map(fl.error.sim.i, function(x) { x %>%
