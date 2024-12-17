@@ -1704,7 +1704,7 @@ flrfl.ch4.national.subtype.co2.gt <-
   filter(subtype == "reservoir", Activity != "reservoir") %>% # "reservoir" row not needed
   select(Activity, subtype, flux.type, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
   mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangement
-         across(where(is.numeric), ~round((./1000)*28))) %>% # convert to MMT CO2-eq
+         across(where(is.numeric), ~./1000)*28) %>% # convert to MMT CO2-eq
   arrange(flux.type) %>%
   select(-subtype, -flux.type)
 
@@ -1775,8 +1775,7 @@ flrfl.ch4.national.subtype.kt.ch4.gt <-
   flrfl.ch4.national.subtype %>% 
   filter(subtype == "reservoir", Activity != "reservoir") %>% # "reservoir" row not needed
   select(Activity, subtype, flux.type, "1990", "2005", "2019", "2020", "2021", "2022", "2023") %>%
-  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total")), # for preferred row arrangement
-         across(where(is.numeric), round)) %>%
+  mutate(flux.type = factor(flux.type, c("surface", "downstream", "total"))) %>% # for preferred row arrangement 
   arrange(flux.type) %>%
   select(-subtype, -flux.type) 
 
@@ -2081,8 +2080,7 @@ flrfl.ch4.2023.reservoir.state.gt <-
   summarize(ch4.surface.tonnes.y = sum(ch4.surface.tonnes.y), 
             ch4.dn.tonnes.y = sum(ch4.dn.tonnes.y)) %>%
   mutate(ch4.total.tonnes.y = ch4.surface.tonnes.y + ch4.dn.tonnes.y) %>%
-  mutate(across(where(is.numeric), ~case_when(.x/1000 < 0.5 ~ "+",
-                                              TRUE ~ round(.x/1000, digits = 0) %>% as.character))) %>% # convert to kt
+  mutate(across(where(is.numeric), ~./1000)) %>% # convert to kt
   rename_with(~sub(pattern = "tonnes", replacement = "ktonnes", x = .), 
               .cols = contains("tonnes")) 
 
@@ -2223,7 +2221,7 @@ fl.cl.area.state.type.gt <-
          lu == "Flooded Land Remaining Flooded Land") %>%
   select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>% # reservoir is only subtype in type == reservoir, thus not necessary
-  summarize(across(contains("area"), ~round(sum(.)/1000000, 2))) %>%
+  summarize(across(contains("area"), ~sum(.)/1000000)) %>%
   arrange(desc(subtype)) %>%
   # Rename columns for the table by extracting the 4-digit year
   rename_with(~str_extract(., "\\d+"), starts_with("area")) 
@@ -2268,7 +2266,7 @@ flrfl.area.reservoir.state.gt <-
   fl.cl.area.state.type %>%
   filter(type == "reservoir",
          lu == "Flooded Land Remaining Flooded Land") %>%
-  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023",final_year))) %>%
+  select(name, type, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(name) %>% 
   summarize(across(contains("area"), ~sum(.)/1000000)) 
 
@@ -2569,9 +2567,9 @@ flrfl.ch4.national.subtype.gt <-
   flrfl.ch4.national.subtype %>% 
   filter(subtype != "reservoir", # NOT reservoir
          flux.type == "total") %>%
-  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
+  select(Activity, subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   # convert kt to MMT CO2 eq (using GWP of 28)
-  mutate(across(where(is.numeric), ~ num((.x/1000) * 28, digits = 1))) %>%
+  mutate(across(where(is.numeric), ~ ./1000) * 28) %>%
   arrange(Activity) %>%
   select(-subtype) 
 
@@ -2589,7 +2587,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_stubhead(label = "Source") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
-  fmt_number() %>%
+  fmt_number(decimals = 1) %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
@@ -2614,7 +2612,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(.), 
+    fmt = ~ fmt_number(., decimals = 1), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -2646,8 +2644,7 @@ flrfl.ch4.national.subtype.gt <-
   flrfl.ch4.national.subtype %>% 
   filter(subtype != "reservoir", # NOT reservoir
          flux.type == "total") %>%
-  select(Activity, subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
-  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) %>%
+  select(Activity, subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   arrange(Activity) %>%
   select(-subtype) 
 
@@ -2665,7 +2662,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
   tab_stubhead(label = "Activity") %>%
   # opt_vertical_padding(2) %>%
   cols_align(align = "left") %>%
-  fmt_number() %>%
+  fmt_number(decimals = 1) %>%
   sub_missing(missing_text = " ") %>%
   # To clear zero values from the "Other Constructed..." row
   sub_zero(zero_text = " ") %>%
@@ -2682,7 +2679,7 @@ gt(flrfl.ch4.national.subtype.gt, rowname_col = "Activity") %>%
     grand_summary_row.border.width = 3) %>%
   grand_summary_rows(
     columns = where(is.numeric), 
-    fmt = ~ fmt_number(.), 
+    fmt = ~ fmt_number(., decimals = 1), 
     fns = list(Total ~ sum(., na.rm = TRUE))) %>%
   tab_style(style = cell_text(weight = "bold", color = "black"), 
             locations = list(cells_grand_summary(), cells_stubhead(), 
@@ -4295,7 +4292,7 @@ Methane and CO~2~ are produced in reservoirs through the natural breakdown of or
 lcfl.ghg.national.subtype.gt.1 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", flux.type != "total", gas == "ch4") %>%
   select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
-  mutate(across(where(is.numeric), ~round((.x/1000) * 28))) # kt CH4 to MMT CO2 equivalent
+  mutate(across(where(is.numeric), ~./1000) * 28) # kt CH4 to MMT CO2 equivalent
 
 
 # Create a GT table of the data
@@ -4415,8 +4412,7 @@ gt(lcfl.ghg.national.subtype.gt.2,
 # CO2: MMT CO2
 lcfl.ghg.national.subtype.gt.3 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", gas == "co2", units == "mmt") %>%
-  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
-  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) 
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) 
 
 
 # Create a GT table of the data
@@ -4446,8 +4442,7 @@ gt(lcfl.ghg.national.subtype.gt.3) %>%
 # CO2: MMT C
 lcfl.ghg.national.subtype.gt.4 <- lcfl.ghg.national.subtype %>% 
   filter(subtype == "reservoir", gas == "co2", units == "mmt") %>%
-  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) %>%
-  mutate(across(where(is.numeric), ~ num(.x, digits = 1))) 
+  select(Source = Activity, "1990", "2005", as.character((final_year-4):final_year)) 
 
 # Create a GT table of the data
 gt(lcfl.ghg.national.subtype.gt.4) %>%
@@ -5014,7 +5009,7 @@ fl.cl.area.state.type.gt.2 <-
          lu == "Land Converted to Flooded Land") %>%
   select(subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   group_by(subtype) %>% # reservoir is only subtype in type == reservoir, thus not necessary
-  summarize(across(contains("area"), ~round(sum(.)/1000, 2))) %>% # thousands of ha
+  summarize(across(contains("area"), ~sum(./1000, 2))) %>% # thousands of ha
   arrange(desc(subtype)) %>%
   # Rename columns for the table by extracting the 4-digit year
   rename_with(~str_extract(., "\\d+"), starts_with("area"))
@@ -5456,8 +5451,8 @@ lcfl.ghg.national.subtype.gt.5 <- lcfl.ghg.national.subtype %>%
   filter(subtype %in% c("canals and ditches", "freshwater pond"),
          flux.type == "total",
          gas == "ch4") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
-  mutate(across(where(is.numeric), ~ num((.x/1000) * 28, digits = 1))) 
+  select(Source = subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
+  mutate(across(where(is.numeric), ~ ./1000 * 28)) 
 
 
 # Create a GT table of the data
@@ -5495,7 +5490,7 @@ lcfl.ghg.national.subtype.gt.6 <- lcfl.ghg.national.subtype %>%
   filter(subtype %in% c("canals and ditches", "freshwater pond"),
          flux.type == "total",
          gas == "ch4") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year)
+  select(Source = subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year)))
 
 
 # Create a GT table of the data
@@ -5534,7 +5529,7 @@ lcfl.ghg.national.subtype.gt.7 <- lcfl.ghg.national.subtype %>%
          flux.type == "surface",
          gas == "co2",
          units == "mmt") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) 
+  select(Source = subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) 
 
 
 # Create a GT table of the data
@@ -5573,7 +5568,7 @@ lcfl.ghg.national.subtype.gt.8 <- lcfl.ghg.national.subtype %>%
          flux.type == "surface",
          gas == "co2",
          units == "mmt") %>%
-  select(Source = subtype, "1990", "2005", "2019", "2020", "2021", "2022", "2023", final_year) %>%
+  select(Source = subtype, matches(c("1990|2005|2019|2020|2021|2022|2023", final_year))) %>%
   mutate(across(where(is.numeric), ~ num(.x * (12/44), digits = 2)))# MMT of C!
   
   # Create a GT table of the data
@@ -5668,12 +5663,7 @@ lcfl.ocwb.ghg.totals.2023 <- fl.e$`2023` %>%
 
 
 # STEP 3: MERGE STATE TABLE WITH TOTALS
-lcfl.ocwb.ghg.state <- rbind(lcfl.ocwb.ghg.state.2023, lcfl.ocwb.ghg.totals.2023) %>% 
-  # IPCC required formatting.  No values meet criteria, so not
-  # actually needed now.
-  mutate(across(where(is.numeric), ~ifelse(.x > 0 & .x < 0.05,
-                                           "+", 
-                                           .x))) 
+lcfl.ocwb.ghg.state <- rbind(lcfl.ocwb.ghg.state.2023, lcfl.ocwb.ghg.totals.2023) 
 
 # Create a GT table of the data
 gt(lcfl.ocwb.ghg.state.2023  %>% 
@@ -6070,7 +6060,6 @@ gt(ef.gt.4) %>%
     climate = "Climate Zone",
     ch4.tonnes.ha.y = md("MT CH<sub>4</sub> ha<sup>-1</sup>y<sup>-1</sup>"),
     co2.tonnes.ha.y = md("MT CO<sub>2</sub> ha<sup>-1</sup>y<sup>-1</sup>")) %>%
-  fmt_number(decimals = 3, columns = 2) %>%
   fmt_number(decimals = 2, columns = 3) %>%
   tab_spanner(label = "Emission Factor", columns = 2:3) %>%
   tab_options(
