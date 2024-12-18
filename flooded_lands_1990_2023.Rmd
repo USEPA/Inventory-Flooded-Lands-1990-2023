@@ -696,6 +696,8 @@ for (i in 1:10) { #
   message("Simulations data object saved to file.")
 }
 
+toc()
+
   # Aggregate by subtype
   fl.error.sim.subtype[[i]] <- map(fl.error.sim.i, function(x) { x %>%
       # Sum emissions for each iteration of simulation.  Only keep summed data.  This reduces memory demands.
@@ -721,8 +723,8 @@ for (i in 1:10) { #
                 year = unique(calc_year)) %>%
       mutate(ghg.total.mmt.co2.eq.y = co2.mmt.co2.eq.y + ch4.total.mmt.co2.eq.y)
   })
-}
-toc()
+
+
 
 
 # Warning message:
@@ -2556,7 +2558,7 @@ The IPCC [@IPCC2019Refinement] provides emission factors for several types of �
 
 Canals and ditches (terms are used interchangeably) are water features constructed to transport water (i.e., stormwater drainage, aqueduct), irrigate or drain land, connect two or more bodies of water, or to serve as a waterway for watercraft. The geometry and construction of canals/ditches varies widely and includes narrow earthen channels (\<1 m wide) and concrete lined aqueducts in excess of 50 m wide. Canals and ditches are typically angular, linear, follow man-made features such as roads, powerlines, and/or agricultural parcels, and much less sinuous than natural riverine systems. Canals and ditches can be extensive in both agricultural and settlement areas, and can be significant sources of emissions in some circumstances.
 
-Methane emissions from freshwater ponds in flooded land remaining flooded land increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(final_year) %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(final_year) %>% pull()) %>% "*"(100) %>% round(1)` percent from 1990 to `r final_year`. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
+Methane emissions from freshwater ponds in flooded land remaining flooded land increased by `r ((flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(as.character(final_year)) %>% pull() -  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select("1990") %>% pull()) /  flrfl.ch4.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total") %>% select(as.character(final_year)) %>% pull()) %>% "*"(100) %>% round(1)` percent from 1990 to `r final_year`. Methane emissions from canals and ditches have remained constant throughout the time series because age data are not available for canals and ditches, thus they are assumed to be greater than 20-years old in 1990 and are included in flooded land remaining flooded land throughout the time series. Overall, CH~4~ emissions from other constructed waterbodies have remained fairly constant since 1990 (Table 6-87 and Table 6-88).
 
 ### <!--TABLE:: National level CH~4~ flux table-->
 
@@ -4511,9 +4513,9 @@ lcfl.ghg.2023.reservoir.mn.ratio <- fl.e$`2023` %>%
 
 ```
 
-Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(.)` reservoirs created after 2001 which impounded `r fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck(final_year) %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
+Minnesota was the largest source of CH~4~ and CO~2~ emissions from reservoirs in land converted to flooded land, constituting `r lcfl.ghg.2023.reservoir.mn.ratio %>% round(.,1)` percent of total emissions from this category (Figure 6-18 and Table 6-105). These emissions are attributed to `r fl.e %>% pluck(as.character(final_year)) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(n = n()) %>% pull() %>% xfun::numbers_to_words(.)` reservoirs created after 2001 which impounded `r fl.e %>% pluck(as.character(final_year)) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull() %>% format(big.mark = ",", digits = 1, scientific = FALSE)` ha of water, `r (fl.e %>% pluck(as.character(final_year)) %>% filter(comid == 2360642) %>% select(area_ha_original) %>% pull() / fl.e %>% pluck(as.character(final_year)) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "Minnesota") %>% summarize(area = sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(0)` percent of which is located in Mille Lacs lake.
 
-North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck(final_year) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management. The dams have not substantially increased the surface area of these reservoirs, but serve to reduce flooding and/or maintain minimum water levels for recreation, thereby affecting water residence time.
+North Dakota is the second largest source of CO~2~ and CH~4~ from reservoirs in land converted to flooded land. Over `r (fl.e %>% pluck(as.character(final_year)) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota") %>% slice_max(area_ha_new) %>% select(area_ha_new) %>% pull() / fl.e %>% pluck(as.character(final_year)) %>% filter(lu == "Land Converted to Flooded Land", type == "reservoir", name == "North Dakota")  %>% summarize(area=sum(area_ha_new)) %>% pull()) %>% "*"(100) %>% round(1)` percent of land converted to flooded land reservoir surface area in North Dakota is attributed to Devils Lake. Both Mille Lacs and Devils Lakes are natural waterbodies provisioned with dams for water level management. The dams have not substantially increased the surface area of these reservoirs, but serve to reduce flooding and/or maintain minimum water levels for recreation, thereby affecting water residence time.
 
 ### <!--FIGURE::  Aggregated reservoir emissions plotted by state-->
 
@@ -5451,7 +5453,7 @@ Freshwater ponds are the only type of flooded lands within the “other construc
 
 IPCC (2019) describes ponds as waterbodies that are “…constructed by excavation and/or construction of walls to hold water in the landscape for a range of uses, including agricultural water storage, access to water for livestock, recreation, and aquaculture.” The IPCC “Decision tree for types of Flooded Land” ([@IPCC2019Refinement], Fig. 7.2) elaborates on this description by defining waterbodies less than 8 ha as a subset of “other constructed waterbodies.” For this *Inventory*, ponds are defined as managed flooded land not identified as “canal/ditch” (see Methods below) with surface area less than 8 ha. IPCC (2019) further distinguishes saline versus brackish ponds, with the former supporting lower CH~4~ emission rates than the latter. Activity data on pond salinity is not uniformly available for the United States and all ponds in land converted to flooded land are assumed to be freshwater. Ponds often receive high organic matter and nutrient loadings, may have low oxygen levels, and are sites of substantial CH~4~ and CO~2~ emissions from anaerobic sediments.
 
-Methane and CO~2~ emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select(final_year) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select(final_year) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` percent, respectively, from 1990 to 2023 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In `r final_year`, states in the Great Plains region generally had the greatest CO~2~ and CH~4~ emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the greatest emissions of all states, partly due to the relatively high CO~2~ emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).
+Methane and CO~2~ emissions from freshwater ponds decreased `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select(as.character(final_year)) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "total", gas == "ch4") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` and `r (1 - (lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select(as.character(final_year)) %>% pull() / lcfl.ghg.national.subtype %>% filter(subtype == "freshwater pond", flux.type == "surface", gas == "co2", units == "mmt") %>% select("1990") %>% pull())) %>% "*" (100) %>% round(., 1)` percent, respectively, from 1990 to 2023 due to flooded land matriculating from Land Converted to Flooded Land to Flooded Land Remaining Flooded Land. In `r final_year`, states in the Great Plains region generally had the greatest CO~2~ and CH~4~ emissions from freshwater ponds in land converted to flooded land (Table 6-110 through Table 6-114, Figure 6-21). Mississippi had the greatest emissions of all states, partly due to the relatively high CO~2~ emission factor for the tropical moist/wet climate zone (Figure 6-17, Table 6-115).
 
 ### <!--TABLE:: National level CH~4~ and CO~2~ flux table-->
 
@@ -6632,7 +6634,7 @@ lcfl.ch4.co2.ocwb.national.current.inventory <-
 lcfl.ghg.national.subtype %>% 
   filter((subtype != "reservoir" & (gas == "co2" & units == "mmt")) |
            (subtype != "reservoir" & (gas == "ch4" & flux.type == "total"))) %>%
-  select(gas, units, as.character(1990:final_year-1)) %>%
+  select(gas, units, as.character(1990:(final_year-1))) %>%
   pivot_longer(!(gas:units), names_to = "year", values_to = "flux") %>%
   mutate(flux = case_when(gas == "ch4" ~ (flux/1000) * 28, # convert CH4 to mmt CO2-eq
                           TRUE ~ flux)) %>%
@@ -6648,7 +6650,7 @@ lcfl.ch4.co2.ocwb.national.previous.inventory <-
     path = "inputData/FloodedLands-Output_90-22_07Nov2023.xlsx", 
     sheet = "7.3.2_LCFL_summary", 
     range = "C34:AI48",
-    col_names = as.character(1990:final_year-1)) %>%
+    col_names = as.character(1990:(final_year-1))) %>%
   slice(c(1,15)) %>%
   mutate(across(everything(), as.numeric)) %>%
   summarise(across(everything(), sum))
